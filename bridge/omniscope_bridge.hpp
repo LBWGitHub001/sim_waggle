@@ -2,6 +2,7 @@
 #define BRIDGE__OMNISCOPE_BRIDGE_HPP
 
 #include <cstdint>
+#include <deque>
 #include <string>
 #include <vector>
 #include <utility>
@@ -39,7 +40,11 @@ public:
   explicit OmniScopeBridge(const BridgeConfig & cfg = BridgeConfig{});
   ~OmniScopeBridge();
 
-  // 发布遥测：误差曲线（键名与 MetricsResult 字段一致）+ 真值/观测值原始量
+  // 发布估计误差遥测：
+  //   核心 6 条（pos_err_norm / vel_err_norm / rel_pos_err / rel_vel_err /
+  //   lead_bias_mm / nis）先单独成包，使 OmniScope 看板默认勾选的就是它们；
+  //   明细曲线（分轴误差、yaw、装甲板拟合、真值/估计速度对比、累计 RMS）随后发布；
+  //   另以 5Hz 刷新云台系 x-y 误差轨迹 err_locus。
   void publish_telemetry(
     const common::GroundTruth & gt,
     const common::ArmorObservation & obs,
@@ -71,6 +76,11 @@ public:
 
 private:
   BridgeConfig cfg_;
+
+  // 误差轨迹（云台系 x-y）环形缓冲，用于 XY 曲线 err_locus
+  std::deque<double> locus_x_;
+  std::deque<double> locus_y_;
+  uint32_t pub_frames_ = 0;
 };
 
 }  // namespace bridge

@@ -99,33 +99,86 @@ void OmniScopeBridge::publish_telemetry(
   // 估计尚未成形时不上报，避免 0 值污染曲线
   if (est.x.size() < 11) return;
 
-  // 1) 误差曲线（先发 → 看板默认勾选这 6 条）
-  //    键名与 MetricsResult 字段一一对应
-  omniscope::plot({
-    {"err_x", metrics.err_x},               // 位置误差 x        (m)
-    {"err_y", metrics.err_y},               // 位置误差 y        (m)
-    {"pos_err_norm", metrics.pos_err_norm}, // 位置误差模长      (m)
-    {"err_vx", metrics.err_vx},             // 速度误差 x        (m/s)
-    {"err_vy", metrics.err_vy},             // 速度误差 y        (m/s)
-    {"vel_err_norm", metrics.vel_err_norm}, // 速度误差模长/伪速度 (m/s)
-  });
+  // ---------------------------------------------------------------
+  // 单位约定：长度 mm，速度 mm/s，角度 deg —— 同一张曲线图里的量级可比，
+  // 曲线键名自带单位，图例即图注。
+  // ---------------------------------------------------------------
 
-  // 2) 真值 / 观测值 / Kalman 估计值（后发 → 侧栏按需勾选）
-  //    三者统一在"世界系原点位于云台"的坐标系下：该系随云台平移但不随其旋转，
-  //    与观测 xyz_in_world = armor_pos - gimbal.pos 完全一致。
-  //    因此真值里混有云台偏置公转的运动（v_true = v_target - v_gimbal）。
-  omniscope::plot({
-    {"true_x", gt.target.center.x() - gt.gimbal.pos.x()},  // 目标相对云台的 x   (m)
-    {"true_y", gt.target.center.y() - gt.gimbal.pos.y()},  // 目标相对云台的 y   (m)
-    {"true_vx", gt.target.vel.x() - gt.gimbal.vel.x()},    // 相对速度 x         (m/s)
-    {"true_vy", gt.target.vel.y() - gt.gimbal.vel.y()},    // 相对速度 y         (m/s)
-    {"obs_x", obs.xyz_in_world.x()},                       // 可见装甲板观测 x   (m)
-    {"obs_y", obs.xyz_in_world.y()},                       // 可见装甲板观测 y   (m)
-    {"kalman_x", est.center.x()},                          // Kalman 估计中心 x  (m)
-    {"kalman_y", est.center.y()},                          // Kalman 估计中心 y  (m)
-    {"kalman_vx", est.velocity.x()},                       // Kalman 估计速度 x  (m/s)
-    {"kalman_vy", est.velocity.y()},                       // Kalman 估计速度 y  (m/s)
-  });
+  // ---------------------------------------------------------------
+  // 1. 核心误差曲线（统一折算为"脱靶量"量纲 mm）：
+  //    单独成包先发，看板首次注册这 6 条并默认勾选。
+  //    两套口径：
+  //      *_err      = 绝对误差（估计 vs 世界系真值，含云台公转平移）
+  //      rel_*      = 相对误差（估计 vs 云台系相对真值 = 观测所在坐标系）
+  //    速度误差按弹道飞行时间折算成落点脱靶量：*_lead = v_err * T
+  // ---------------------------------------------------------------
+  {
+    nlohmann::json core;
+    core["pos_err_mm"] = metrics.pos_err_norm * 1000.0;
+    core["rel_pos_err_mm"] = metrics.rel_pos_err_norm * 1000.0;
+    core["lead_bias_mm"] = metrics.aim_lead_bias * 1000.0;
+    core["rel_lead_bias_mm"] = metrics.rel_aim_lead_bias * 1000.0;
+    core["err_pos_x_mm"] = metrics.err_x * 1000.0;
+    core["err_pos_y_mm"] = metrics.err_y * 1000.0;
+    omniscope::RemoteLogger::instance().plot(core);
+  }
+
+  // ---------------------------------------------------------------
+  // 2. 明细曲线（看板侧栏可逐条勾选）
+  // ---------------------------------------------------------------
+  {
+    nlohmann::json detail;
+    // 速度误差（mm/s）与相对分轴位置误差（mm）
+    detail["vel_err_mm_s"] = metrics.vel_err_norm * 1000.0;
+    detail["rel_vel_err_mm_s"] = metrics.rel_vel_err_norm * 1000.0;
+    detail["err_vel_x_mm_s"] = metrics.err_vx * 1000.0;
+    detail["err_vel_y_mm_s"] = metrics.err_vy * 1000.0;
+    detail["rel_err_x_mm"] = metrics.rel_err_x * 1000.0;
+    detail["rel_err_y_mm"] = metrics.rel_err_y * 1000.0;
+    // 姿态 / 角速度 / 装甲板拟合
+    detail["err_yaw_deg"] = metrics.err_yaw * 180.0 / M_PI;
+    detail["err_w_deg_s"] = metrics.err_w * 180.0 / M_PI;
+    detail["armor_err_mm"] = metrics.armor_err_norm * 1000.0;
+    // 原始观测量与估计量（与误差曲线同一时间轴，便于对照成因；沿用原信道 SI 单位）
+    detail["obs_x"] = obs.xyz_in_world.x();
+    detail["obs_y"] = obs.xyz_in_world.y();
+    detail["target_x"] = est.center.x();
+    detail["target_y"] = est.center.y();
+    detail["target_vx"] = est.velocity.x();
+    detail["target_vy"] = est.velocity.y();
+    detail["true_vx"] = gt.target.vel.x();
+    detail["true_vy"] = gt.target.vel.y();
+    // 滤波一致性
+    detail["nis"] = metrics.nis;
+    // 累计统计（自启动以来）
+    detail["rmse_pos_mm"] = metrics.rmse_pos * 1000.0;
+    detail["rmse_rel_pos_mm"] = metrics.rmse_pos_rel * 1000.0;
+    detail["rmse_vel_mm_s"] = metrics.rmse_vel * 1000.0;
+    detail["rmse_rel_vel_mm_s"] = metrics.rmse_vel_rel * 1000.0;
+    omniscope::RemoteLogger::instance().plot(detail);
+  }
+
+  // ---------------------------------------------------------------
+  // 3. 云台系 x-y 平面误差轨迹（XY 曲线 err_locus）
+  //    误差随底盘转速公转时，轨迹呈圆环 —— 偏置影响的直观形态。
+  //    限频 5Hz 刷新整窗，避免 UDP 带宽膨胀。
+  // ---------------------------------------------------------------
+  constexpr size_t kLocusWindow = 300;    // 窗口样本数（100Hz 下约 3s）
+  constexpr uint32_t kLocusStride = 20;    // 每 20 帧刷新一次 → 5Hz
+
+  locus_x_.push_back(metrics.rel_err_x);
+  locus_y_.push_back(metrics.rel_err_y);
+  if (locus_x_.size() > kLocusWindow) locus_x_.pop_front();
+  if (locus_y_.size() > kLocusWindow) locus_y_.pop_front();
+
+  if (++pub_frames_ % kLocusStride == 0 && locus_x_.size() >= 2) {
+    nlohmann::json locus;
+    locus["err_locus"] = {
+      {"x", std::vector<double>(locus_x_.begin(), locus_x_.end())},
+      {"y", std::vector<double>(locus_y_.begin(), locus_y_.end())},
+      {"meta", {{"xlabel", "err_x (m)"}, {"kind", "locus"}}}};
+    omniscope::RemoteLogger::instance().plot(locus);
+  }
 }
 
 void OmniScopeBridge::publish_3d_markers(

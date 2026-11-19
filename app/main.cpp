@@ -76,10 +76,6 @@ AppConfig load_config(const std::string & path)
     cfg.ekf.r_yaw = ekf_n["r_yaw"].as<double>(0.04);
     cfg.ekf.r_pitch = ekf_n["r_pitch"].as<double>(0.04);
     cfg.ekf.r_dist_base = ekf_n["r_dist_base"].as<double>(0.015);
-    // 三角补偿项：ω 取底盘自转角速度（真实系统来自陀螺），0 = 关闭
-    cfg.ekf.comp_w = ekf_n["comp_w"].as<double>(0.0);
-    cfg.ekf.comp_q_var = ekf_n["comp_q_var"].as<double>(1.0);
-    cfg.ekf.comp_p0_var = ekf_n["comp_p0_var"].as<double>(0.01);
     if (ekf_n["p0"]) {
       auto p0_vec = ekf_n["p0"].as<std::vector<double>>();
       cfg.p0 = Eigen::Map<Eigen::VectorXd>(p0_vec.data(), p0_vec.size());
@@ -195,30 +191,21 @@ int main(int argc, char * argv[])
       // 周期性终端打印（含观测队列深度，>1 说明 tracker 消费跟不上）
       if (tick_start - last_log >= std::chrono::seconds(2)) {
         last_log = tick_start;
-        // 世界系原点在云台：真值 = 目标相对云台的位姿（含云台偏置公转）
-        const Eigen::Vector3d true_rel_p = gt.target.center - gt.gimbal.pos;
-        const Eigen::Vector3d true_rel_v = gt.target.vel - gt.gimbal.vel;
         bridge.log(
           "INFO",
-          "t={:.1f}s | true=({:.3f},{:.3f})m v=({:.3f},{:.3f})m/s | obs=({:.3f},{:.3f})m"
-          " | est=({:.3f},{:.3f})m | vel_err={:.2f}m/s pos_err={:.2f}m aim_bias={:.1f}cm nis={:.2f} obs_queue={}",
-          tout.sim_t,
-          true_rel_p.x(), true_rel_p.y(),
-          true_rel_v.x(), true_rel_v.y(),
-          obs_msg.obs.xyz_in_world.x(), obs_msg.obs.xyz_in_world.y(),
-          est.center.x(), est.center.y(),
-          metrics.vel_err_norm, metrics.pos_err_norm,
+          "t={:.1f}s | abs: pos_err={:.3f}m vel_err={:.3f}m/s | rel: pos_err={:.3f}m vel_err={:.3f}m/s"
+          " | rms(rel) p={:.3f}m v={:.3f}m/s | aim_bias={:.1f}cm nis={:.2f} obs_queue={}",
+          tout.sim_t, metrics.pos_err_norm, metrics.vel_err_norm,
+          metrics.rel_pos_err_norm, metrics.rel_vel_err_norm,
+          metrics.rmse_pos_rel, metrics.rmse_vel_rel,
           metrics.aim_lead_bias * 100.0, est.last_nis, obs_channel.size());
         std::cout << fmt::format(
-          "[t={:5.1f}s] true=({:6.3f},{:6.3f}) v=({:5.3f},{:5.3f}) | obs=({:6.3f},{:6.3f})"
-          " | est=({:6.3f},{:6.3f}) | Ghost Vel: {:4.2f} m/s | Pos Err: {:4.2f} m | Lead Bias: {:4.1f} cm\n",
-          tout.sim_t,
-          true_rel_p.x(), true_rel_p.y(),
-          true_rel_v.x(), true_rel_v.y(),
-          obs_msg.obs.xyz_in_world.x(), obs_msg.obs.xyz_in_world.y(),
-          est.center.x(), est.center.y(),
-          metrics.vel_err_norm, metrics.pos_err_norm,
-          metrics.aim_lead_bias * 100.0);
+          "[t={:5.1f}s] ABS pos/vel err: {:5.3f} m / {:5.3f} m/s | REL pos/vel err: {:5.3f} m / {:5.3f} m/s"
+          " | RMS(rel): {:5.3f} / {:5.3f} | Lead Bias: {:5.1f} cm | EKF w: {:5.2f} | Queue: {}\n",
+          tout.sim_t, metrics.pos_err_norm, metrics.vel_err_norm,
+          metrics.rel_pos_err_norm, metrics.rel_vel_err_norm,
+          metrics.rmse_pos_rel, metrics.rmse_vel_rel,
+          metrics.aim_lead_bias * 100.0, est.w, obs_channel.size());
       }
     }
 
@@ -232,10 +219,31 @@ int main(int argc, char * argv[])
   sim_node.join();
   tracker_node.join();
 
+  const double wall_s =
+    std::chrono::duration<double>(std::chrono::steady_clock::now() - loop_t0).count();
+
+  // 退出前输出整段运行的误差汇总（与 OmniScope 曲线同一口径）
+  const auto & m = metrics_evaluator.latest();
+  if (m.samples > 0) {
+    std::cout << fmt::format(
+      "\n===== estimation error summary ({} samples) =====\n"
+      "  ABS  pos: rms={:.3f} m  mean={:.3f} m  max={:.3f} m\n"
+      "  ABS  vel: rms={:.3f} m/s mean={:.3f} m/s max={:.3f} m/s\n"
+      "  REL  pos: rms={:.3f} m      (vs target-gimbal relativeness)\n"
+      "  REL  vel: rms={:.3f} m/s\n"
+      "  lead bias (vel_err * flight_time) = {:.2f} mm\n",
+      m.samples,
+      m.rmse_pos, m.mean_pos, m.max_pos,
+      m.rmse_vel, m.mean_vel, m.max_vel,
+      m.rmse_pos_rel, m.rmse_vel_rel, m.aim_lead_bias * 1000.0);
+    bridge.log(
+      "INFO", "error summary: ABS pos rms={:.3f}m, ABS vel rms={:.3f}m/s, REL pos rms={:.3f}m, REL vel rms={:.3f}m/s",
+      m.rmse_pos, m.rmse_vel, m.rmse_pos_rel, m.rmse_vel_rel);
+  }
+
   bridge.log(
     "INFO", "sim_waggle stopped after {:.2f}s ({} frames published)",
-    std::chrono::duration<double>(std::chrono::steady_clock::now() - loop_t0).count(),
-    sim_node.frames_published());
+    wall_s, sim_node.frames_published());
   bridge.shutdown();
 
   std::cout << "\nSimulation finished cleanly.\n";

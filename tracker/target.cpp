@@ -31,21 +31,13 @@ Target::Target(
   auto center_y = xyz[1] + r * std::sin(ypr[0]);
   auto center_z = xyz[2];
 
-  // x vx y vy z vz a w r l h  |  ax bx ay by
+  // x vx y vy z vz a w r l h
   // a: angle
   // w: angular velocity
   // l: r2 - r1
   // h: z2 - z1
-  // ax/bx: 补偿项 cos/sin 系数（x 轴），ay/by: y 轴
-  Eigen::VectorXd x0{{center_x, 0, center_y, 0, center_z, 0, ypr[0], 0, r, 0, 0,
-                     0, 0, 0, 0}};  // 初始化预测量
-
-  // P0：前 11 维用配置值，补偿系数维给初值方差
-  Eigen::VectorXd p0_dig(Eigen::VectorXd::Zero(kStateSize));
-  p0_dig.head(kBaseStateSize) = P0_dig.head(kBaseStateSize);
-  p0_dig.tail(kCompStateSize).setConstant(
-    ekf_params_.comp_w > 0.0 ? ekf_params_.comp_p0_var : 0.0);
-  Eigen::MatrixXd P0 = p0_dig.asDiagonal();
+  Eigen::VectorXd x0{{center_x, 0, center_y, 0, center_z, 0, ypr[0], 0, r, 0, 0}};  // 初始化预测量
+  Eigen::MatrixXd P0 = P0_dig.asDiagonal();
 
   // 防止夹角求和出现异常值
   auto x_add = [](const Eigen::VectorXd & a, const Eigen::VectorXd & b) -> Eigen::VectorXd {
@@ -59,8 +51,9 @@ Target::Target(
 
 Target::Target(double x, double vyaw, double radius, double h) : armor_num_(4)
 {
-  Eigen::VectorXd x0{{x, 0, 0, 0, 0, 0, 0, vyaw, radius, 0, h, 0, 0, 0, 0}};
-  Eigen::MatrixXd P0 = Eigen::MatrixXd::Zero(kStateSize, kStateSize);
+  Eigen::VectorXd x0{{x, 0, 0, 0, 0, 0, 0, vyaw, radius, 0, h}};
+  Eigen::VectorXd P0_dig{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+  Eigen::MatrixXd P0 = P0_dig.asDiagonal();
 
   auto x_add = [](const Eigen::VectorXd & a, const Eigen::VectorXd & b) -> Eigen::VectorXd {
     Eigen::VectorXd c = a + b;
@@ -80,13 +73,22 @@ void Target::predict(std::chrono::steady_clock::time_point t)
 
 void Target::predict(double dt)
 {
-  // 状态转移矩阵：前 11 维与原版一致（CV + 匀角速度 + 常值 r/l/h），
-  // 后 4 维为三角补偿系数，常值模型
-  Eigen::MatrixXd F = Eigen::MatrixXd::Identity(kStateSize, kStateSize);
-  F(0, 1) = dt;
-  F(2, 3) = dt;
-  F(4, 5) = dt;
-  F(6, 7) = dt;
+  // 状态转移矩阵
+  // clang-format off
+  Eigen::MatrixXd F{
+    {1, dt,  0,  0,  0,  0,  0,  0,  0,  0,  0},
+    {0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0},
+    {0,  0,  1, dt,  0,  0,  0,  0,  0,  0,  0},
+    {0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0},
+    {0,  0,  0,  0,  1, dt,  0,  0,  0,  0,  0},
+    {0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0},
+    {0,  0,  0,  0,  0,  0,  1, dt,  0,  0,  0},
+    {0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0},
+    {0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0},
+    {0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0},
+    {0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1}
+  };
+  // clang-format on
 
   // Piecewise White Noise Model
   double v1 = ekf_params_.q_xyz_acc_var;
@@ -95,24 +97,21 @@ void Target::predict(double dt)
   auto b = dt * dt * dt / 2;
   auto c = dt * dt;
 
-  Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(kStateSize, kStateSize);
-  for (int k = 0; k < 3; k++) {  // x / y / z 三个轴的位置-速度块
-    Q(2 * k, 2 * k) = a * v1;
-    Q(2 * k, 2 * k + 1) = b * v1;
-    Q(2 * k + 1, 2 * k) = b * v1;
-    Q(2 * k + 1, 2 * k + 1) = c * v1;
-  }
-  Q(6, 6) = a * v2;
-  Q(6, 7) = b * v2;
-  Q(7, 6) = b * v2;
-  Q(7, 7) = c * v2;
-
-  // 三角补偿项：相位随 ω·dt 推进；系数按随机游走，允许缓慢自适应
-  if (ekf_params_.comp_w > 0.0) {
-    comp_phase_ = std::fmod(comp_phase_ + ekf_params_.comp_w * dt, 2.0 * M_PI);
-    const double q_comp = ekf_params_.comp_q_var * dt;
-    for (int i = kBaseStateSize; i < kStateSize; i++) Q(i, i) = q_comp;
-  }
+  // clang-format off
+  Eigen::MatrixXd Q{
+    {a * v1, b * v1,      0,      0,      0,      0,      0,      0, 0, 0, 0},
+    {b * v1, c * v1,      0,      0,      0,      0,      0,      0, 0, 0, 0},
+    {     0,      0, a * v1, b * v1,      0,      0,      0,      0, 0, 0, 0},
+    {     0,      0, b * v1, c * v1,      0,      0,      0,      0, 0, 0, 0},
+    {     0,      0,      0,      0, a * v1, b * v1,      0,      0, 0, 0, 0},
+    {     0,      0,      0,      0, b * v1, c * v1,      0,      0, 0, 0, 0},
+    {     0,      0,      0,      0,      0,      0, a * v2, b * v2, 0, 0, 0},
+    {     0,      0,      0,      0,      0,      0, b * v2, c * v2, 0, 0, 0},
+    {     0,      0,      0,      0,      0,      0,      0,      0, 0, 0, 0},
+    {     0,      0,      0,      0,      0,      0,      0,      0, 0, 0, 0},
+    {     0,      0,      0,      0,      0,      0,      0,      0, 0, 0, 0}
+  };
+  // clang-format on
 
   auto f = [&](const Eigen::VectorXd & x) -> Eigen::VectorXd {
     Eigen::VectorXd x_prior = F * x;
@@ -262,22 +261,7 @@ Eigen::Vector3d Target::h_armor_xyz(const Eigen::VectorXd & x, int id) const
   auto armor_y = x[2] - r * std::sin(angle);
   auto armor_z = (use_l_h) ? x[4] + x[10] : x[4];
 
-  // 三角补偿项：叠加在观测预测上（估计出的自车偏置公转）
-  const Eigen::Vector2d comp = comp_offset(x);
-  armor_x += comp.x();
-  armor_y += comp.y();
-
   return {armor_x, armor_y, armor_z};
-}
-
-/// 三角（正弦）补偿项：a·cos(ωt) + b·sin(ωt)，x/y 两轴各一组系数
-Eigen::Vector2d Target::comp_offset(const Eigen::VectorXd & x) const
-{
-  if (ekf_params_.comp_w <= 0.0 || x.size() < kStateSize) return Eigen::Vector2d::Zero();
-
-  const double c = std::cos(comp_phase_);
-  const double s = std::sin(comp_phase_);
-  return {x[11] * c + x[12] * s, x[13] * c + x[14] * s};
 }
 
 Eigen::MatrixXd Target::h_jacobian(const Eigen::VectorXd & x, int id) const
@@ -295,28 +279,14 @@ Eigen::MatrixXd Target::h_jacobian(const Eigen::VectorXd & x, int id) const
   auto dy_dl = (use_l_h) ? -std::sin(angle) : 0.0;
   auto dz_dh = (use_l_h) ? 1.0 : 0.0;
 
-  // 位置对状态的雅可比 (4 x 15)：前 11 维与原版一致，后 4 维为三角补偿系数
-  Eigen::MatrixXd H_armor_xyza = Eigen::MatrixXd::Zero(4, kStateSize);
-  H_armor_xyza(0, 0) = 1.0;
-  H_armor_xyza(1, 2) = 1.0;
-  H_armor_xyza(2, 4) = 1.0;
-  H_armor_xyza(0, 6) = dx_da;
-  H_armor_xyza(1, 6) = dy_da;
-  H_armor_xyza(0, 8) = dx_dr;
-  H_armor_xyza(1, 8) = dy_dr;
-  H_armor_xyza(0, 9) = dx_dl;
-  H_armor_xyza(1, 9) = dy_dl;
-  H_armor_xyza(2, 10) = dz_dh;
-  H_armor_xyza(3, 6) = 1.0;
-  // d(x,y)/d(ax,bx,ay,by) = cos(ωt) / sin(ωt)
-  if (ekf_params_.comp_w > 0.0) {
-    const double cc = std::cos(comp_phase_);
-    const double ss = std::sin(comp_phase_);
-    H_armor_xyza(0, 11) = cc;
-    H_armor_xyza(0, 12) = ss;
-    H_armor_xyza(1, 13) = cc;
-    H_armor_xyza(1, 14) = ss;
-  }
+  // clang-format off
+  Eigen::MatrixXd H_armor_xyza{
+    {1, 0, 0, 0, 0, 0, dx_da, 0, dx_dr, dx_dl,     0},
+    {0, 0, 1, 0, 0, 0, dy_da, 0, dy_dr, dy_dl,     0},
+    {0, 0, 0, 0, 1, 0,     0, 0,     0,     0, dz_dh},
+    {0, 0, 0, 0, 0, 0,     1, 0,     0,     0,     0}
+  };
+  // clang-format on
 
   Eigen::Vector3d armor_xyz = h_armor_xyz(x, id);
   Eigen::MatrixXd H_armor_ypd = tools::xyz2ypd_jacobian(armor_xyz);

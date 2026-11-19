@@ -106,12 +106,11 @@ sim_waggle/
    - `kalman.vel`（**警示红橙色 3D 箭头**，随底盘旋转以 $\approx 1.2\,\text{m/s}$ 疯狂公转变向，直观暴露正弦伪速度）
    - `aim.lead`（金黄色弹道超前瞄准落点球体与火控射线）
 2. **左下相机视口**：实时的 **`camera_detector`** 车载相机检测图像（荧光蓝 LED 灯条、端点角点、绿框及随伪速度剧烈绕圈偏摆的黄色 `AIM LEAD` 准星）；
-3. **左上波形视口**：**估计误差曲线**（`bridge::OmniScopeBridge::publish_telemetry` 内一次 `omniscope::plot` 上报，键名与 `MetricsResult` 字段一致）：
-   - `err_x` / `err_y`（分轴位置误差 m）、`pos_err_norm`（位置误差模长 m）
-   - `err_vx` / `err_vy`（分轴速度误差 m/s）、`vel_err_norm`（速度误差模长 = 伪速度幅值 m/s）
-   - 原始量（同一次上报，侧栏按需勾选）：`true_x` / `true_y` / `true_vx` / `true_vy`（真值）、
-     `obs_x` / `obs_y`（可见装甲板观测）、`kalman_x` / `kalman_y` / `kalman_vx` / `kalman_vy`（EKF 估计）
-   - **世界系原点在云台**：该系随云台平移、不随其旋转，与观测 `xyz_in_world = armor_pos - gimbal.pos` 完全一致；
-     因此真值取 `目标 − 云台`（`v_true = v_target − v_gimbal`），真值里混有云台偏置公转的运动，
-     误差 `err_* = kalman_* − true_*` 即滤波器在该坐标系下的真实跟踪误差
+3. **左上波形视口**：**估计误差曲线**（`bridge::OmniScopeBridge::publish_telemetry` 发布，单位见键名）：
+   - 默认勾选的 6 条核心曲线（统一折算为脱靶量 mm，量级可比）：
+     `pos_err_mm` / `rel_pos_err_mm`（位置误差）、`lead_bias_mm` / `rel_lead_bias_mm`（速度误差×弹道飞行时间的落点脱靶量）、`err_pos_x_mm` / `err_pos_y_mm`（分轴位置误差）
+   - 侧栏可勾选的明细通道：`vel_err_mm_s`、`rel_vel_err_mm_s`、`err_vel_*_mm_s`、`rel_err_*_mm`、`err_yaw_deg`、`err_w_deg_s`、`armor_err_mm`、`nis`、`rmse_*_mm`，以及 `obs_*` / `target_*` / `true_v*` 原始量
+   - 两套误差口径：`pos_err_mm` / `lead_bias_mm` 为**绝对误差**（估计 vs 世界系真值，含云台公转平移）；
+     `rel_pos_err_mm` / `rel_lead_bias_mm` 为**相对误差**（估计 vs 云台系相对真值，即观测所在坐标系，反映 EKF 自身精度）
+   - 另有 XY 曲线 `err_locus`：云台系 x-y 平面误差轨迹（面板类型切到「XY 曲线」即可查看）
 4. **右下日志视口**：实时结构化日志控制台。
