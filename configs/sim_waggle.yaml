@@ -1,0 +1,49 @@
+# sim_waggle simulation configuration
+
+simulation:
+  fps: 100
+  duration: 0  # 0: 无限循环，直到按下 Ctrl+C；>0: 指定运行秒数
+
+my_robot:
+  chassis_w: 12.0                  # 底盘小陀螺角速度 (rad/s)
+  chassis_vx: 0.0                 # 底盘平移线速度 X (m/s)
+  chassis_vy: 0.0                 # 底盘平移线速度 Y (m/s)
+  gimbal_offset: [0.05, 0.0, 0.0] # 云台旋转中心相对底盘旋转中心的偏置 [dx, dy, dz] (m)
+
+target_robot:
+  init_pos: [3.5, 0.0, 0.0]       # 目标初始空间坐标 [x, y, z] (m)
+  vel: [0.0, 0.0, 0.0]            # 目标真实平移速度 [vx, vy, vz] (m/s)
+  radius: 0.20                    # 装甲板旋转半径 (m)
+  w: 7.0                          # 目标自转角速度 (rad/s)
+  armor_num: 4                    # 装甲板数量
+
+measurement:
+  enable_noise: true
+  noise_pos_std: 0.005            # 观测位置噪声标准差 (m)
+  noise_yaw_std: 0.01             # 观测装甲板角噪声标准差 (rad)
+
+ekf:
+  q_xyz_acc_var: 100.0            # 位置/速度加速度方差 (原版 auto_aim 参数)
+  q_yaw_acc_var: 75.0             # 角加速度方差
+  r_yaw: 0.04                     # yaw 观测噪声
+  r_pitch: 0.04                   # pitch 观测噪声
+  r_dist_base: 0.015              # 距离观测噪声基础值
+  comp_w: 12.0                    # 三角补偿项角频率 (rad/s) = 底盘自转；0 表示关闭
+  comp_q_var: 1.0                 # 补偿系数随机游走方差 (m^2/s)，留自适应余量
+  comp_p0_var: 0.01               # 补偿系数初始方差 (m^2) → 初值幅度 0.1 m
+  p0: [1, 64, 1, 64, 1, 64, 0.4, 400, 1.0e-5, 1, 1]
+
+remote_logger:
+  control_port: 15000
+  beacon_port: 15999
+  enable_remote: true
+  enable_local: false
+  log_dir: "./logs"
+  var_buffer_size: 1024
+  img_buffer_size: 10
+  img_width: 800
+  img_quality: 60
+  heartbeat_interval_ms: 500
+  sender_name: "sim_waggle"
+  beacon_interval_ms: 1000
+  head_timeout_ms: 2000

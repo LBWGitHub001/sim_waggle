@@ -1,0 +1,3 @@
+[submodule "thirdparty/OmniScope"]
+	path = thirdparty/OmniScope
+	url = git@github.com:LBWGitHub001/OmniScope.git
