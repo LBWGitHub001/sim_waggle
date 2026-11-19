@@ -44,15 +44,14 @@ add_subdirectory(sim)
 add_subdirectory(tracker)
 
 # -----------------------------------------------------------------------------
-# 主程序：节点接线 + 可视化（render / bridge 为 app 侧私有）
+# 主程序：节点接线 + 可视化（render 为 app 侧私有）
 # -----------------------------------------------------------------------------
 add_executable(sim_waggle
   app/main.cpp
   render/camera_detector_renderer.cpp
-  bridge/omniscope_bridge.cpp
 )
 
-# render / bridge 仍使用 "common/..." 根式 include
+# render 仍使用 "common/..." 根式 include
 target_include_directories(sim_waggle PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
 )

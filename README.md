@@ -2,7 +2,8 @@
 
 本工程是一个**独立、完整、现代高内聚架构**的 C++ 仿真测试平台。从 RoboMaster 自瞄代码库 `auto_aim_` 提取了原版 Kalman 滤波逻辑，模拟**云台旋转中心与底盘旋转中心不重合（偏置 $R_d$）在底盘小陀螺/摆动（$\omega_c$）时对自瞄后端 Kalman 滤波产生的影响**。
 
-本工程严格贯彻**对 OmniScope 零侵入原则**（Zero-Intrusion），仅将 [OmniScope](https://github.com/LBWGitHub001/OmniScope.git) 视作只读外部 SDK，通过独立的 `bridge/` 隔离层交互，提供**标准 ROS 2 3D Marker 交互场景**、实时遥测数据波形与高逼真度**车载相机目标检测图像 (`camera_detector`)**。
+本工程严格贯彻**对 OmniScope 零侵入原则**（Zero-Intrusion），仅将 [OmniScope](https://github.com/LBWGitHub001/OmniScope.git) 视作只读外部 SDK，由节点直接调用 `omniscope::plot` 上报遥测：
+**`SimNode` 发观测与真值**、**`TrackerNode` 发 Kalman 状态**，3D Marker 与相机图像在 `main` 里直接下发；不设任何适配/转发层。
 
 ---
 
@@ -14,7 +15,7 @@
 
 **运行时数据流**：`SimNode` 线程以 50Hz 推进物理仿真，发布观测到 FIFO `Channel`；
 `TrackerNode` 线程事件驱动逐条消费（首帧 init，之后每帧 predict+update，**不丢帧、数值可复现**），
-估计快照经 `LatestSlot` 发布；main 线程只读最新快照做可视化（metrics / bridge / render）。
+估计快照经 `LatestSlot` 发布；main 线程只读最新快照做场景可视化（metrics / render / 3D Marker）。
 
 ```
 sim_waggle/
@@ -53,12 +54,8 @@ sim_waggle/
 │   ├── camera_detector_renderer.hpp # 800x600 针孔透视、发光 LED 灯条、YOLO 框与 HUD
 │   └── camera_detector_renderer.cpp
 │
-├── bridge/                     # OmniScope 隔离适配器（app 侧私有, Adapter Pattern）
-│   ├── omniscope_bridge.hpp    # 封装 RemoteLogger，下发 ROS 2 3D Marker 与遥测波形
-│   └── omniscope_bridge.cpp
-│
 ├── app/                        # 接线层
-│   └── main.cpp                # load_config() 一处解析 YAML；创建话题通道、启动两节点线程；main 循环只做可视化
+│   └── main.cpp                # load_config() 一处解析 YAML；创建通道、启动两节点；main 循环做可视化 + 3D Marker
 │
 └── scripts/
     └── run_host.sh             # 启动 OmniScope Host 门户脚本
@@ -106,11 +103,14 @@ sim_waggle/
    - `kalman.vel`（**警示红橙色 3D 箭头**，随底盘旋转以 $\approx 1.2\,\text{m/s}$ 疯狂公转变向，直观暴露正弦伪速度）
    - `aim.lead`（金黄色弹道超前瞄准落点球体与火控射线）
 2. **左下相机视口**：实时的 **`camera_detector`** 车载相机检测图像（荧光蓝 LED 灯条、端点角点、绿框及随伪速度剧烈绕圈偏摆的黄色 `AIM LEAD` 准星）；
-3. **左上波形视口**：**估计误差曲线**（`bridge::OmniScopeBridge::publish_telemetry` 发布，单位见键名）：
-   - 默认勾选的 6 条核心曲线（统一折算为脱靶量 mm，量级可比）：
-     `pos_err_mm` / `rel_pos_err_mm`（位置误差）、`lead_bias_mm` / `rel_lead_bias_mm`（速度误差×弹道飞行时间的落点脱靶量）、`err_pos_x_mm` / `err_pos_y_mm`（分轴位置误差）
-   - 侧栏可勾选的明细通道：`vel_err_mm_s`、`rel_vel_err_mm_s`、`err_vel_*_mm_s`、`rel_err_*_mm`、`err_yaw_deg`、`err_w_deg_s`、`armor_err_mm`、`nis`、`rmse_*_mm`，以及 `obs_*` / `target_*` / `true_v*` 原始量
-   - 两套误差口径：`pos_err_mm` / `lead_bias_mm` 为**绝对误差**（估计 vs 世界系真值，含云台公转平移）；
-     `rel_pos_err_mm` / `rel_lead_bias_mm` 为**相对误差**（估计 vs 云台系相对真值，即观测所在坐标系，反映 EKF 自身精度）
-   - 另有 XY 曲线 `err_locus`：云台系 x-y 平面误差轨迹（面板类型切到「XY 曲线」即可查看）
+3. **左上波形视口**：**由两个节点各自直接上报**（`omniscope::plot`，无 bridge 转发），
+   **所有坐标都在"云台中心"坐标系下**（原点 = 云台旋转中心，随云台平移、不随其旋转；
+   与观测 `xyz_in_world = armor_pos − gimbal.pos` 一致，底盘环绕中心不在其中）：
+   - `SimNode::publish()`（[sim/sim_node.cpp](sim/sim_node.cpp)）上报
+     - 观测：`obs_armor_x/y/z`（m）、`obs_armor_yaw_deg`（deg）、`obs_w_ego`（本车自转 rad/s）
+     - 真值：装甲板 `true_armor_x/y/z`、`true_armor_yaw_deg`；目标中心 `true_center_x/y/z`、
+       `true_vel_x/y/z`、`true_yaw_deg`、`true_w`；`true_w_ego`（本车自转真值）
+   - `TrackerNode::run()`（[tracker/tracker_node.cpp](tracker/tracker_node.cpp)）上报
+     - Kalman 状态：`kal_center_x/y/z`（m）、`kal_vel_x/y/z`（m/s）、`kal_yaw_deg`、`kal_w`、`kal_radius_mm`
+   - 估计误差仍在 `common::SimulationMetrics` 中计算，供相机 HUD 与终端日志使用（不单独发布曲线）
 4. **右下日志视口**：实时结构化日志控制台。

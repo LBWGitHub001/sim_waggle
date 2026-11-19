@@ -1,5 +1,7 @@
 #include "tracker_node.hpp"
 
+#include <cmath>
+
 #include "fft.hpp"
 
 namespace tracker
@@ -46,6 +48,21 @@ void TrackerNode::run()
     // 发布估计快照（可视化线程读取）
     est_out_.set(common::TrackerOutput{target, msg.sim_t});
 
+    // ---------------- 遥测：Kalman 状态组（本节点直接发布）----------------
+    // 坐标系：云台中心（与观测 xyz_in_world 同一系）
+    if (target.x.size() >= 11) {
+      omniscope::plot({
+        {"kal_center_x", target.center.x()},        // 目标中心 x   (m)
+        {"kal_center_y", target.center.y()},        // 目标中心 y   (m)
+        {"kal_center_z", target.center.z()},        // 目标中心 z   (m)
+        {"kal_vel_x", target.velocity.x()},         // 目标速度 x   (m/s)
+        {"kal_vel_y", target.velocity.y()},         // 目标速度 y   (m/s)
+        {"kal_vel_z", target.velocity.z()},         // 目标速度 z   (m/s)
+        {"kal_yaw_deg", target.yaw * 180.0 / M_PI}, // 目标朝向 yaw (deg)
+        {"kal_w", target.w},                        // 目标自转 w   (rad/s)
+        {"kal_radius_mm", target.radius * 1000.0},  // 装甲板半径   (mm)
+      });
+    }
   }
 
   finished_ = true;
