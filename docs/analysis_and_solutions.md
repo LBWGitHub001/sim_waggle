@@ -364,8 +364,10 @@ render/camera_detector_renderer.cpp：
       // A. 观测/估计统一到世界系（S1）——推荐
       // B. 若 est 是相对系，则 cam_pos 用 0，或投影前 est_world = est + gt.gimbal.pos
 
-- bridge/omniscope_bridge.cpp 的 aim.lead 射线从 gt.gimbal.pos（绝对）到 aim_lead_pt（相对）也是混帧；3D 视口的 kalman.* 与 ground_truth.* 不在同一原点，视觉上会错位。
-- main.cpp:183 的 compute_aim_lead_point 用相对 est 直接当世界点，同样受影响。
+- （已修复）3D marker 曾混帧：aim.lead 射线从 gt.gimbal.pos（绝对）到 aim_lead_pt（相对），3D 视口的 kalman.* 与 ground_truth.* 不在同一原点。
+  现在 app/main.cpp 的 publish_3d_markers 把所有 marker 统一到云台中心系（frame_id = gimbal），
+  底盘/云台连杆/真值均减去 gt.gimbal.pos，aim 射线从原点射出，因此 kalman.* 与 ground_truth.* 的间距就是真实估计误差。
+- main.cpp 的 compute_aim_lead_point 用相对 est 直接当世界点，同样受影响（在当前云台系口径下成立）。
 
 ---
 

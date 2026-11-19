@@ -146,7 +146,13 @@ void publish_3d_markers(
   std::vector<omniscope::Marker> markers;
   markers.reserve(20);
 
-  const std::string frame = "world";
+  // 所有 marker 统一在"云台中心"坐标系下（原点 = 云台旋转中心），
+  // 与世界系只差一个平移 gt.gimbal.pos。原先 ground_truth.* 用世界系、
+  // kalman.* 用云台系，两者会差一个 gimbal_offset（≈5 cm），
+  // 看起来像估计误差 —— 现在统一后才是真实的估计偏差。
+  const Eigen::Vector3d & gimbal_pos = gt.gimbal.pos;
+  const Eigen::Vector3d zero = Eigen::Vector3d::Zero();
+  const std::string frame = "gimbal";
 
   // 1. 底盘 (my_robot.chassis)
   {
@@ -156,7 +162,7 @@ void publish_3d_markers(
     m.id = 0;
     m.type = omniscope::MarkerType::SPHERE;
     m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(gt.chassis.pos);
+    m.pose.position = to_vec3(gt.chassis.pos - gimbal_pos);
     m.scale = {0.16f, 0.16f, 0.16f};
     m.color = to_rgba(0.0f, 0.94f, 1.0f, 0.95f);
     markers.push_back(m);
@@ -168,8 +174,9 @@ void publish_3d_markers(
     m.id = 1;
     m.type = omniscope::MarkerType::ARROW;
     m.action = omniscope::MarkerAction::ADD;
-    Eigen::Vector3d end_pt = gt.chassis.pos + Eigen::Vector3d(0.40 * std::cos(gt.chassis.yaw), 0.40 * std::sin(gt.chassis.yaw), 0.0);
-    m.points = {to_vec3(gt.chassis.pos), to_vec3(end_pt)};
+    const Eigen::Vector3d chassis = gt.chassis.pos - gimbal_pos;
+    Eigen::Vector3d end_pt = chassis + Eigen::Vector3d(0.40 * std::cos(gt.chassis.yaw), 0.40 * std::sin(gt.chassis.yaw), 0.0);
+    m.points = {to_vec3(chassis), to_vec3(end_pt)};
     m.scale = {0.035f, 0.07f, 0.07f};
     m.color = to_rgba(0.0f, 0.94f, 1.0f, 1.0f);
     markers.push_back(m);
@@ -182,7 +189,7 @@ void publish_3d_markers(
     m.id = 10;
     m.type = omniscope::MarkerType::LINE_LIST;
     m.action = omniscope::MarkerAction::ADD;
-    m.points = {to_vec3(gt.chassis.pos), to_vec3(gt.gimbal.pos)};
+    m.points = {to_vec3(gt.chassis.pos - gimbal_pos), to_vec3(zero)};
     m.scale = {0.015f, 0.0f, 0.0f};
     m.color = to_rgba(1.0f, 0.85f, 0.1f, 1.0f);
     markers.push_back(m);
@@ -194,7 +201,7 @@ void publish_3d_markers(
     m.id = 11;
     m.type = omniscope::MarkerType::SPHERE;
     m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(gt.gimbal.pos);
+    m.pose.position = to_vec3(zero);  // 云台中心 = 原点
     m.scale = {0.11f, 0.11f, 0.11f};
     m.color = to_rgba(1.0f, 0.85f, 0.1f, 1.0f);
     markers.push_back(m);
@@ -206,8 +213,8 @@ void publish_3d_markers(
     m.id = 12;
     m.type = omniscope::MarkerType::ARROW;
     m.action = omniscope::MarkerAction::ADD;
-    Eigen::Vector3d aim_dir = gt.gimbal.pos + Eigen::Vector3d(0.50 * std::cos(gt.gimbal.yaw), 0.50 * std::sin(gt.gimbal.yaw), 0.0);
-    m.points = {to_vec3(gt.gimbal.pos), to_vec3(aim_dir)};
+    Eigen::Vector3d aim_dir = Eigen::Vector3d(0.50 * std::cos(gt.gimbal.yaw), 0.50 * std::sin(gt.gimbal.yaw), 0.0);
+    m.points = {to_vec3(zero), to_vec3(aim_dir)};
     m.scale = {0.025f, 0.05f, 0.05f};
     m.color = to_rgba(1.0f, 0.95f, 0.2f, 1.0f);
     markers.push_back(m);
@@ -220,7 +227,7 @@ void publish_3d_markers(
     m.id = 20;
     m.type = omniscope::MarkerType::SPHERE;
     m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(gt.target.center);
+    m.pose.position = to_vec3(gt.target.center - gimbal_pos);
     m.scale = {0.11f, 0.11f, 0.11f};
     m.color = to_rgba(0.1f, 1.0f, 0.3f, 0.95f);
     markers.push_back(m);
@@ -233,14 +240,14 @@ void publish_3d_markers(
     m.id = static_cast<int32_t>(30 + i);
     m.type = omniscope::MarkerType::CUBE;
     m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(gt.target.armors_pos[i]);
+    m.pose.position = to_vec3(gt.target.armors_pos[i] - gimbal_pos);
     m.pose.orientation = eigen_quat_to_omni(armor_quat(gt.target.armors_yaw[i]));
     m.scale = {static_cast<float>(ARMOR_THICKNESS), static_cast<float>(SMALL_ARMOR_WIDTH), static_cast<float>(LIGHTBAR_LENGTH)};
     m.color = to_rgba(0.1f, 0.95f, 0.3f, 0.9f);
     markers.push_back(m);
 
-    gt_spokes.push_back(to_vec3(gt.target.center));
-    gt_spokes.push_back(to_vec3(gt.target.armors_pos[i]));
+    gt_spokes.push_back(to_vec3(gt.target.center - gimbal_pos));
+    gt_spokes.push_back(to_vec3(gt.target.armors_pos[i] - gimbal_pos));
   }
   {
     omniscope::Marker m;
@@ -340,7 +347,7 @@ void publish_3d_markers(
     m.id = 82;
     m.type = omniscope::MarkerType::LINE_LIST;
     m.action = omniscope::MarkerAction::ADD;
-    m.points = {to_vec3(gt.gimbal.pos), to_vec3(aim_lead_pt)};
+    m.points = {to_vec3(zero), to_vec3(aim_lead_pt)};  // 从云台中心（原点）射出
     m.scale = {0.008f, 0.0f, 0.0f};
     m.color = to_rgba(1.0f, 0.8f, 0.1f, 0.75f);
     markers.push_back(m);
