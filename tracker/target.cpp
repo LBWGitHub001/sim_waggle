@@ -73,12 +73,8 @@ void Target::predict(std::chrono::steady_clock::time_point t)
 
 void Target::predict(double dt)
 {
-  predict(dt, Eigen::Vector3d::Zero());
-}
+  last_dt_ = dt;
 
-void Target::predict(double dt, const Eigen::Vector3d & acc)
-{
-  // 状态转移矩阵
   // clang-format off
   Eigen::MatrixXd F{
     {1, dt,  0,  0,  0,  0,  0,  0,  0,  0,  0},
@@ -95,37 +91,8 @@ void Target::predict(double dt, const Eigen::Vector3d & acc)
   };
   // clang-format on
 
-  // B：只把 xy 加速度映射进 [xc,vx,yc,vy]。u ~ N(û, Qu)
-  const double dt2 = 0.5 * dt * dt;
-  Eigen::MatrixXd B = Eigen::MatrixXd::Zero(11, 2);
-  B(0, 0) = dt2;
-  B(1, 0) = dt;
-  B(2, 1) = dt2;
-  B(3, 1) = dt;
-  const Eigen::Vector2d u(acc.x(), acc.y());
-
-  // z / yaw 仍用分段白噪声；xy 的未知加速度改由 B Qu Bᵀ 承担
-  double v1 = ekf_params_.q_xyz_acc_var;
-  double v2 = ekf_params_.q_yaw_acc_var;
-  double vu = ekf_params_.q_u_acc_var;
-  auto a = dt * dt * dt * dt / 4;
-  auto b = dt * dt * dt / 2;
-  auto c = dt * dt;
-
-  Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(11, 11);
-  Q(4, 4) = a * v1;
-  Q(4, 5) = b * v1;
-  Q(5, 4) = b * v1;
-  Q(5, 5) = c * v1;
-  Q(6, 6) = a * v2;
-  Q(6, 7) = b * v2;
-  Q(7, 6) = b * v2;
-  Q(7, 7) = c * v2;
-  Eigen::Matrix2d Qu = Eigen::Matrix2d::Identity() * vu;
-  Q += B * Qu * B.transpose();
-
   auto f = [&](const Eigen::VectorXd & x) -> Eigen::VectorXd {
-    Eigen::VectorXd x_prior = F * x + B * u;
+    Eigen::VectorXd x_prior = F * x;
     x_prior[6] = tools::limit_rad(x_prior[6]);
     return x_prior;
   };
@@ -134,7 +101,21 @@ void Target::predict(double dt, const Eigen::Vector3d & acc)
   if (this->convergened() && this->name == ArmorName::outpost && std::abs(this->ekf_.x[7]) > 2)
     this->ekf_.x[7] = this->ekf_.x[7] > 0 ? 2.51 : -2.51;
 
-  ekf_.predict(F, Q, f);
+  ekf_.predict(F, f);
+}
+
+void Target::control(const Eigen::Vector3d & acc)
+{
+  const double dt = last_dt_;
+  const double dt2 = 0.5 * dt * dt;
+  Eigen::MatrixXd B = Eigen::MatrixXd::Zero(11, 2);
+  B(0, 0) = dt2;
+  B(1, 0) = dt;
+  B(2, 1) = dt2;
+  B(3, 1) = dt;
+  const Eigen::Vector2d u(acc.x(), acc.y());
+  const Eigen::Matrix2d M = Eigen::Matrix2d::Identity() * ekf_params_.q_u_acc_var;
+  ekf_.control(B, u, M);
 }
 
 void Target::update(const Armor & armor)
@@ -220,7 +201,25 @@ void Target::update_ypda(const Armor & armor, int id)
   const Eigen::VectorXd & ypr = armor.ypr_in_world;
   Eigen::VectorXd z{{ypd[0], ypd[1], ypd[2], ypr[0]}};
 
-  ekf_.update(z, H, R, h, z_subtract);
+  const double dt = last_dt_;
+  Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(11, 11);
+  if (dt > 0.0) {
+    const double v1 = ekf_params_.q_xyz_acc_var;
+    const double v2 = ekf_params_.q_yaw_acc_var;
+    const double a = dt * dt * dt * dt / 4.0;
+    const double b = dt * dt * dt / 2.0;
+    const double c = dt * dt;
+    Q(4, 4) = a * v1;
+    Q(4, 5) = b * v1;
+    Q(5, 4) = b * v1;
+    Q(5, 5) = c * v1;
+    Q(6, 6) = a * v2;
+    Q(6, 7) = b * v2;
+    Q(7, 6) = b * v2;
+    Q(7, 7) = c * v2;
+  }
+
+  ekf_.update(z, H, R, Q, h, z_subtract);
 }
 
 Eigen::VectorXd Target::ekf_x() const { return ekf_.x; }

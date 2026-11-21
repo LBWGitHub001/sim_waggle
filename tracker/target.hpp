@@ -40,7 +40,7 @@ public:
 
   void predict(std::chrono::steady_clock::time_point t);
   void predict(double dt);
-  void predict(double dt, const Eigen::Vector3d & acc);
+  void control(const Eigen::Vector3d & acc);
 
   void update(const Armor & armor);
 
@@ -65,6 +65,7 @@ private:
   tools::ExtendedKalmanFilter ekf_;
   std::chrono::steady_clock::time_point t_;
   EkfParams ekf_params_;
+  double last_dt_ = 0.0;
 
   void update_ypda(const Armor & armor, int id);  // yaw pitch distance angle
 

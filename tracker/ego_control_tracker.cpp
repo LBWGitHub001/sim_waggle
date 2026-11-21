@@ -21,9 +21,10 @@ EgoControlTracker::EgoControlTracker(
   }
 }
 
-void EgoControlTracker::set_control(const Eigen::Vector3d & ego_acc)
+void EgoControlTracker::control(const Eigen::Vector3d & ego_acc)
 {
-  u_ = ego_acc;
+  if (!target_) return;
+  target_->control(ego_acc);
 }
 
 auto_aim::Armor EgoControlTracker::to_auto_aim_armor(const common::ArmorObservation & obs) const
@@ -55,7 +56,7 @@ void EgoControlTracker::predict(double dt)
 {
   if (!target_) return;
   current_t_ += dt;
-  target_->predict(dt, u_);
+  target_->predict(dt);
 }
 
 void EgoControlTracker::update(const common::ArmorObservation & obs)

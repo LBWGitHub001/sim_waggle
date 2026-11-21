@@ -186,11 +186,11 @@ void TrackerNode::run()
   double last_t = -1.0;
 
   while (!stop_requested_.load() && obs_in_.wait_pop(msg)) {
-    tracker_->set_control(msg.ego_acc);
     if (last_t < 0.0) {
       tracker_->update(msg.obs);
     } else {
       tracker_->predict(msg.sim_t - last_t);
+      tracker_->control(msg.ego_acc);
       tracker_->update(msg.obs);
     }
     last_t = msg.sim_t;

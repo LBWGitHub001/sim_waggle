@@ -20,32 +20,42 @@ ExtendedKalmanFilter::ExtendedKalmanFilter(
   data["recent_nis_failures"] = 0.0;
 }
 
-Eigen::VectorXd ExtendedKalmanFilter::predict(const Eigen::MatrixXd & F, const Eigen::MatrixXd & Q)
+Eigen::VectorXd ExtendedKalmanFilter::predict(const Eigen::MatrixXd & F)
 {
-  return predict(F, Q, [&](const Eigen::VectorXd & x) { return F * x; });
+  return predict(F, [&](const Eigen::VectorXd & x) { return F * x; });
 }
 
 Eigen::VectorXd ExtendedKalmanFilter::predict(
-  const Eigen::MatrixXd & F, const Eigen::MatrixXd & Q,
-  std::function<Eigen::VectorXd(const Eigen::VectorXd &)> f)
+  const Eigen::MatrixXd & F, std::function<Eigen::VectorXd(const Eigen::VectorXd &)> f)
 {
-  P = F * P * F.transpose() + Q;
+  P = F * P * F.transpose();
   x = f(x);
+  return x;
+}
+
+Eigen::VectorXd ExtendedKalmanFilter::control(
+  const Eigen::MatrixXd & B, const Eigen::VectorXd & u, const Eigen::MatrixXd & M)
+{
+  x = x_add(x, B * u);
+  P = P + B * M * B.transpose();
   return x;
 }
 
 Eigen::VectorXd ExtendedKalmanFilter::update(
   const Eigen::VectorXd & z, const Eigen::MatrixXd & H, const Eigen::MatrixXd & R,
+  const Eigen::MatrixXd & Q,
   std::function<Eigen::VectorXd(const Eigen::VectorXd &, const Eigen::VectorXd &)> z_subtract)
 {
-  return update(z, H, R, [&](const Eigen::VectorXd & x) { return H * x; }, z_subtract);
+  return update(z, H, R, Q, [&](const Eigen::VectorXd & x) { return H * x; }, z_subtract);
 }
 
 Eigen::VectorXd ExtendedKalmanFilter::update(
   const Eigen::VectorXd & z, const Eigen::MatrixXd & H, const Eigen::MatrixXd & R,
-  std::function<Eigen::VectorXd(const Eigen::VectorXd &)> h,
+  const Eigen::MatrixXd & Q, std::function<Eigen::VectorXd(const Eigen::VectorXd &)> h,
   std::function<Eigen::VectorXd(const Eigen::VectorXd &, const Eigen::VectorXd &)> z_subtract)
 {
+  P = P + Q;
+
   Eigen::VectorXd x_prior = x;
   Eigen::MatrixXd K = P * H.transpose() * (H * P * H.transpose() + R).inverse();
 

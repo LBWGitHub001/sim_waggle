@@ -10,7 +10,7 @@ namespace tracker
 {
 
 /// 把云台系 xy 加速度作为控制量 u 注入过程模型：x = Fx + Bu。
-/// 不做圆周/杆臂建模；z 不加控制。
+/// 不做圆周/杆臂建模；z 不加控制。调用序：predict(dt) → control(ego_acc) → update(obs)。
 class EgoControlTracker
 {
 public:
@@ -20,9 +20,9 @@ public:
     const auto_aim::EkfParams & ekf_params = auto_aim::EkfParams{},
     const Eigen::VectorXd & p0 = Eigen::VectorXd::Zero(11));
 
-  void set_control(const Eigen::Vector3d & ego_acc);
   void init(const common::ArmorObservation & init_obs, double t);
   void predict(double dt);
+  void control(const Eigen::Vector3d & ego_acc);
   void update(const common::ArmorObservation & obs);
 
   common::TargetEstimate estimate() const;
@@ -38,7 +38,6 @@ private:
   int armor_num_;
   auto_aim::EkfParams ekf_params_;
   Eigen::VectorXd p0_;
-  Eigen::Vector3d u_ = Eigen::Vector3d::Zero();
 
   std::unique_ptr<auto_aim::Target> target_;
   std::chrono::steady_clock::time_point t0_;

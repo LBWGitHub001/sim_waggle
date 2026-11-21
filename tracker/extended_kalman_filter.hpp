@@ -22,20 +22,25 @@ public:
     std::function<Eigen::VectorXd(const Eigen::VectorXd &, const Eigen::VectorXd &)> x_add =
       [](const Eigen::VectorXd & a, const Eigen::VectorXd & b) { return a + b; });
 
-  Eigen::VectorXd predict(const Eigen::MatrixXd & F, const Eigen::MatrixXd & Q);
-
+  /// x = Fx, P = F P Fᵀ. Optional f wraps yaw etc.
+  Eigen::VectorXd predict(const Eigen::MatrixXd & F);
   Eigen::VectorXd predict(
-    const Eigen::MatrixXd & F, const Eigen::MatrixXd & Q,
-    std::function<Eigen::VectorXd(const Eigen::VectorXd &)> f);
+    const Eigen::MatrixXd & F, std::function<Eigen::VectorXd(const Eigen::VectorXd &)> f);
 
+  /// x += B u, P += B M Bᵀ. M is control-noise covariance.
+  Eigen::VectorXd control(const Eigen::MatrixXd & B, const Eigen::VectorXd & u,
+                          const Eigen::MatrixXd & M);
+
+  /// P += Q, then Joseph measurement update.
   Eigen::VectorXd update(
     const Eigen::VectorXd & z, const Eigen::MatrixXd & H, const Eigen::MatrixXd & R,
+    const Eigen::MatrixXd & Q,
     std::function<Eigen::VectorXd(const Eigen::VectorXd &, const Eigen::VectorXd &)> z_subtract =
       [](const Eigen::VectorXd & a, const Eigen::VectorXd & b) { return a - b; });
 
   Eigen::VectorXd update(
     const Eigen::VectorXd & z, const Eigen::MatrixXd & H, const Eigen::MatrixXd & R,
-    std::function<Eigen::VectorXd(const Eigen::VectorXd &)> h,
+    const Eigen::MatrixXd & Q, std::function<Eigen::VectorXd(const Eigen::VectorXd &)> h,
     std::function<Eigen::VectorXd(const Eigen::VectorXd &, const Eigen::VectorXd &)> z_subtract =
       [](const Eigen::VectorXd & a, const Eigen::VectorXd & b) { return a - b; });
 
