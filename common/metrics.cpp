@@ -67,7 +67,7 @@ MetricsResult SimulationMetrics::update(
     return r;
   }
 
-  const TargetState & truth = gt.target_inertial;
+  const TargetState & truth = gt.target;
 
   r.err_x = est.center.x() - truth.center.x();
   r.err_y = est.center.y() - truth.center.y();

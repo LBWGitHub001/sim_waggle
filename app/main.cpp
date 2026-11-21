@@ -156,16 +156,14 @@ omniscope::TransformStamped make_tf(
 
 void publish_tfs(const common::GroundTruth & gt)
 {
-  // 世界系 gimbal.pos≡0 ⇒ 惯性云台位置 = 惯性敌心 − 世界系表观敌心；
-  // 无惯性真值时退回 −chassis.pos（底盘惯性原点为 0）。
-  Eigen::Vector3d p_gimbal = gt.target_inertial.center - gt.target.center;
-  if (p_gimbal.norm() < 1e-12) p_gimbal = -gt.chassis.pos;
-  const Eigen::Vector3d p_chassis = p_gimbal + gt.chassis.pos;
-
+  const Eigen::Vector3d d = gt.gimbal.pos - gt.chassis.pos;
+  const double cy = std::cos(gt.chassis.yaw);
+  const double sy = std::sin(gt.chassis.yaw);
+  const Eigen::Vector3d p_offset(cy * d.x() + sy * d.y(), -sy * d.x() + cy * d.y(), d.z());
   omniscope::plot_tfs({
-    make_tf("field", "world", p_gimbal, 0.0),
-    make_tf("field", "chassis", p_chassis, gt.chassis.yaw),
-    make_tf("field", "gimbal", p_gimbal, gt.gimbal.yaw),
+    make_tf("odom", "chassis", gt.chassis.pos, gt.chassis.yaw),
+    make_tf("chassis", "gimbal", p_offset, gt.gimbal.yaw - gt.chassis.yaw),
+    make_tf("odom", "robot", gt.target.center, gt.target.yaw),
   });
 }
 

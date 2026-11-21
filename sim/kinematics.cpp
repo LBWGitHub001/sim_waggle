@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "frames.hpp"
+
 namespace sim
 {
 namespace
@@ -13,7 +15,6 @@ double limit_rad(double angle)
   return angle;
 }
 
-// 绕 Z 轴旋转 yaw 弧度的旋转矩阵
 Eigen::Matrix3d rot_z(double yaw)
 {
   const double c = std::cos(yaw);
@@ -37,7 +38,6 @@ void KinematicsEngine::reset()
   gt_ = common::GroundTruth{};
   gt_.t = 0.0;
 
-  // 积分量初值
   gt_.chassis.vel = Eigen::Vector3d(cfg_.chassis_vx, cfg_.chassis_vy, 0.0);
 
   gt_.target.center = cfg_.target_init_pos;
@@ -47,12 +47,16 @@ void KinematicsEngine::reset()
   gt_.target.armors_pos.resize(cfg_.armor_num);
   gt_.target.armors_yaw.resize(cfg_.armor_num);
 
-  // t = 0 时刻的派生量：直接计算，不做任何隐藏步进
+  last_gimbal_vel_.setZero();
+  origin_acc_.setZero();
+  last_dt_ = 0.0;
+
   update_derived();
 }
 
 void KinematicsEngine::step(double dt)
 {
+  last_dt_ = dt;
   gt_.t += dt;
   integrate_chassis(dt);
   integrate_target(dt);
@@ -79,17 +83,15 @@ void KinematicsEngine::update_derived()
   update_gimbal();
   update_armors();
   select_visible_armor();
-  express_in_world_frame();
+  update_origin_acc();
 }
 
 void KinematicsEngine::update_gimbal()
 {
-  // 辅助惯性系：偏置杆臂；云台线速度 = 底盘平移 + 杆臂公转 ω × r
-  const Eigen::Vector3d r_world = rot_z(gt_.chassis.yaw) * cfg_.gimbal_offset;
-  gt_.gimbal.pos = gt_.chassis.pos + r_world;
-  gt_.gimbal.vel = gt_.chassis.vel + Eigen::Vector3d(0.0, 0.0, gt_.chassis.w).cross(r_world);
+  const Eigen::Vector3d r_odom = rot_z(gt_.chassis.yaw) * cfg_.gimbal_offset;
+  gt_.gimbal.pos = gt_.chassis.pos + r_odom;
+  gt_.gimbal.vel = gt_.chassis.vel + Eigen::Vector3d(0.0, 0.0, gt_.chassis.w).cross(r_odom);
 
-  // 云台始终平滑对准目标中心
   const Eigen::Vector3d to_target = gt_.target.center - gt_.gimbal.pos;
   gt_.gimbal.yaw = std::atan2(to_target.y(), to_target.x());
   gt_.gimbal.pitch = 0.0;
@@ -98,19 +100,18 @@ void KinematicsEngine::update_gimbal()
 
 void KinematicsEngine::update_armors()
 {
-  for (int i = 0; i < cfg_.armor_num; i++) {
-    const double yaw_i = limit_rad(gt_.target.yaw + i * 2.0 * M_PI / cfg_.armor_num);
-    gt_.target.armors_yaw[i] = yaw_i;
-    gt_.target.armors_pos[i] = gt_.target.center + Eigen::Vector3d(
-      -cfg_.target_radius * std::cos(yaw_i),
-      -cfg_.target_radius * std::sin(yaw_i),
-      0.0);
+  const Eigen::Matrix3d R_robot2odom = rot_z(gt_.target.yaw);
+  const int n = cfg_.armor_num;
+  const double r = cfg_.target_radius;
+  for (int i = 0; i < n; i++) {
+    const Eigen::Vector3d p_robot = common::armor_in_robot(i, n, r);
+    gt_.target.armors_pos[i] = gt_.target.center + R_robot2odom * p_robot;
+    gt_.target.armors_yaw[i] = limit_rad(gt_.target.yaw + common::armor_yaw_in_robot(i, n));
   }
 }
 
 void KinematicsEngine::select_visible_armor()
 {
-  // 装甲板法向与"装甲板指向云台"视线方向点积最大者，即正面最朝向云台的装甲板
   int best_id = 0;
   double max_dot = -1e10;
   for (int i = 0; i < cfg_.armor_num; i++) {
@@ -126,23 +127,14 @@ void KinematicsEngine::select_visible_armor()
   gt_.visible_armor_id = best_id;
 }
 
-void KinematicsEngine::express_in_world_frame()
+void KinematicsEngine::update_origin_acc()
 {
-  // 世界系：原点绑在云台中心，轴向与辅助惯性系平行（不旋转）。
-  const Eigen::Vector3d origin = gt_.gimbal.pos;
-  const Eigen::Vector3d v_origin = gt_.gimbal.vel;
-
-  world_ = gt_;
-  world_.target_inertial = gt_.target;  // 场地系敌车，不含云台公转
-  world_.chassis.pos -= origin;
-  world_.chassis.vel -= v_origin;
-  world_.gimbal.pos = Eigen::Vector3d::Zero();
-  world_.gimbal.vel = Eigen::Vector3d::Zero();
-  world_.target.center -= origin;
-  world_.target.vel -= v_origin;
-  for (auto & p : world_.target.armors_pos) {
-    p -= origin;
+  if (last_dt_ > 1e-12) {
+    origin_acc_ = (gt_.gimbal.vel - last_gimbal_vel_) / last_dt_;
+  } else {
+    origin_acc_.setZero();
   }
+  last_gimbal_vel_ = gt_.gimbal.vel;
 }
 
 }  // namespace sim

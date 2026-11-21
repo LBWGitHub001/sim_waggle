@@ -65,8 +65,8 @@ void SimNode::publish(double sim_t, uint64_t frame)
   topics_.obs_out.push(std::move(msg));
 
   // ---------------- 遥测：观测组 + 真值组（本节点直接发布）----------------
-  // obs / Kalman：世界系（原点=云台）。true_*：辅助惯性系敌车，不含云台公转。
-  const auto & enemy = gt.target_inertial;
+  // 过渡：commit 3 会改成 gimbal 系 true_* / obs_*。此处先用 odom target 替代已删除的 target_inertial。
+  const auto & enemy = gt.target;
   Eigen::Vector3d true_armor = Eigen::Vector3d::Zero();
   double true_armor_yaw = 0.0;
   const int visible_id = gt.visible_armor_id;

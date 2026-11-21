@@ -10,20 +10,18 @@ namespace common
 {
 
 // =============================================================================
-// 世界系定义（滤波 / 观测 / 3D）
-//   原点：绑定正在旋转的云台旋转中心（随云台平移）
-//   轴向：与惯性系平行，不随云台旋转
-// xyz_in_world、EKF、3D Marker、kal_* 均在此系。
-// 因此 gimbal.pos ≡ 0、gimbal.vel ≡ 0；底盘绕原点公转，杆臂 = -chassis.pos。
+// 坐标系
+//   odom   场地惯性系（中间件）。运动学在此积分；仅 TF 使用这些坐标。
+//   gimbal 云台/相机系（日常工作系）。观测、EKF、plot、误差都在此。
+//   robot  敌车体。装甲板绑在此系；robot 本身在 odom 中转动。
 //
-// 敌车平移真值不在此系里“跟着原点晃”：
-//   GroundTruth::target          — 世界系表观量（渲染 / 相机几何）
-//   GroundTruth::target_inertial — 辅助惯性系（场地）敌车，误差与 true_* 用这个
-// 真实自瞄里敌车几乎不动；若把表观运动写进真值，Kalman 会和真值贴在一起，
-// 把杆臂鬼影（约 ω|d|）掩盖掉。
+// GroundTruth 的 chassis / gimbal / target 位姿都是 odom。
+// 日常使用请走 frames.hpp 的 express_*_in_gimbal()，不要直接拿 odom 坐标滤波。
+// xyz_in_gimbal / EKF / kal_* / err_* 在 gimbal。
+// xyz_in_world 保留为装甲在 odom 的位置，滤波和 plot 不用。
 // =============================================================================
 
-// 1. 本车底盘状态
+// 1. 本车底盘状态（odom）
 struct ChassisState
 {
   Eigen::Vector3d pos = Eigen::Vector3d::Zero();
@@ -32,8 +30,7 @@ struct ChassisState
   double w = 0.0; // 自转角速度 (rad/s)
 };
 
-// 2. 本车云台状态（世界原点即云台中心，pos/vel 恒为 0）
-// 杆臂（云台相对底盘）= -chassis.pos
+// 2. 本车云台状态（odom）。R_gimbal2world = Rz(yaw) = gimbal → odom
 struct GimbalState
 {
   Eigen::Vector3d pos = Eigen::Vector3d::Zero();
@@ -43,7 +40,7 @@ struct GimbalState
   Eigen::Matrix3d R_gimbal2world = Eigen::Matrix3d::Identity();
 };
 
-// 3. 敌车目标真实状态
+// 3. 敌车目标真实状态（odom：center/yaw/armors_pos；装甲几何绑在 robot）
 struct TargetState
 {
   Eigen::Vector3d center = Eigen::Vector3d::Zero();
@@ -56,27 +53,26 @@ struct TargetState
   std::vector<double> armors_yaw;
 };
 
-// 4. 仿真环境综合真实物理状态 (GroundTruth)
+// 4. 仿真环境综合真实物理状态（odom 位姿，给 TF / 中间件）
 struct GroundTruth
 {
   double t = 0.0;
   ChassisState chassis;
   GimbalState gimbal;
-  TargetState target;           // 世界系表观（原点=云台）：给相机渲染 / 观测几何
-  TargetState target_inertial;  // 辅助惯性系敌车：给 true_* 与 Kalman−真值误差
+  TargetState target;
 
   // 当前由视觉传感器认定的最佳可见装甲板 id，
-  // 位姿请按 id 索引 target.armors_pos / target.armors_yaw（不再冗余存储）
+  // 位姿请按 id 索引 target.armors_pos / target.armors_yaw（odom）
   int visible_armor_id = 0;
 };
 
 // 5. 传感器产生的装甲板视觉测量 (Observation)
 struct ArmorObservation
 {
-  Eigen::Vector3d xyz_in_gimbal = Eigen::Vector3d::Zero(); // 相机系（随云台 yaw 转）
-  Eigen::Vector3d xyz_in_world = Eigen::Vector3d::Zero();  // 世界系（原点=云台，轴向固定）
-  Eigen::Vector3d ypd_in_world = Eigen::Vector3d::Zero(); // yaw, pitch, distance
-  double yaw_raw = 0.0;
+  Eigen::Vector3d xyz_in_gimbal = Eigen::Vector3d::Zero(); // 工作系（随云台 yaw 转）
+  Eigen::Vector3d xyz_in_world = Eigen::Vector3d::Zero();  // 装甲在 odom（中间件，滤波不用）
+  Eigen::Vector3d ypd_in_world = Eigen::Vector3d::Zero(); // yaw, pitch, distance（由 xyz_in_gimbal）
+  double yaw_raw = 0.0; // 装甲 yaw 在 gimbal（rad）
   double confidence = 0.98;
   std::string name = "one";
   std::string color = "blue";
@@ -85,7 +81,7 @@ struct ArmorObservation
   double height = 0.056;
 };
 
-// 6. 算法给出的目标状态估计 (TargetEstimate)，世界系
+// 6. 算法给出的目标状态估计（gimbal）
 struct TargetEstimate
 {
   Eigen::VectorXd x; // 11 维状态向量 [xc, vx, yc, vy, zc, vz, yaw, w, r, ...]
@@ -108,11 +104,42 @@ struct StampedObservation
   uint64_t frame = 0;
 };
 
+// Kalman − gimbal 系真值。放在 types 以便 TrackerOutput 携带，避免 metrics↔types 循环。
+struct MetricsResult
+{
+  double err_x = 0.0;   // m
+  double err_y = 0.0;
+  double err_z = 0.0;
+  double err_vx = 0.0;  // m/s
+  double err_vy = 0.0;
+  double err_vz = 0.0;
+  double err_yaw = 0.0; // rad, (-pi, pi]
+  double err_w = 0.0;   // rad/s
+  double err_r = 0.0;   // m
+
+  double pos_err_norm = 0.0;
+  double vel_err_norm = 0.0;
+  double armor_err_norm = 0.0;
+
+  double flight_time = 0.0;
+  double aim_lead_bias = 0.0;
+  double nis = 0.0;
+
+  uint64_t samples = 0;
+  double rmse_pos = 0.0;
+  double rmse_vel = 0.0;
+  double mean_pos = 0.0;
+  double mean_vel = 0.0;
+  double max_pos = 0.0;
+  double max_vel = 0.0;
+};
+
 // /target_estimate 话题（TrackerNode 发布 → 可视化读取）
 struct TrackerOutput
 {
   TargetEstimate est;
   double sim_t = 0.0;
+  MetricsResult metrics;
 };
 
 // 8. 仿真系统参数配置
