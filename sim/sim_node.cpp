@@ -67,11 +67,10 @@ omniscope::TransformStamped make_tf(
   return tf;
 }
 
-void publish_tfs(const common::GroundTruth & gt, const Eigen::Vector3d & gimbal_offset)
+void publish_tfs(const common::GroundTruth & gt)
 {
   omniscope::plot_tfs({
-    make_tf("odom", "chassis", gt.chassis.pos, gt.chassis.yaw),
-    make_tf("chassis", "gimbal", gimbal_offset, common::wrap_pi(gt.gimbal.yaw - gt.chassis.yaw)),
+    make_tf("odom", "gimbal", gt.gimbal.pos, gt.gimbal.yaw),
     make_tf("odom", "robot", gt.target.center, gt.target.yaw),
   });
 }
@@ -96,24 +95,27 @@ void publish_gt_markers(const common::GroundTruth & gt)
 
   {
     omniscope::Marker m;
-    m.frame_id = "chassis";
+    m.frame_id = "odom";
     m.ns = "my_robot.chassis";
     m.id = 0;
     m.type = omniscope::MarkerType::SPHERE;
     m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = {0.0f, 0.0f, 0.0f};
+    m.pose.position = to_vec3(gt.chassis.pos);
     m.scale = {0.16f, 0.16f, 0.16f};
     m.color = to_rgba(0.0f, 0.94f, 1.0f, 0.95f);
     markers.push_back(m);
   }
   {
     omniscope::Marker m;
-    m.frame_id = "chassis";
+    m.frame_id = "odom";
     m.ns = "my_robot.chassis";
     m.id = 1;
     m.type = omniscope::MarkerType::ARROW;
     m.action = omniscope::MarkerAction::ADD;
-    m.points = {{0.0f, 0.0f, 0.0f}, {0.40f, 0.0f, 0.0f}};
+    const Eigen::Vector3d p = gt.chassis.pos;
+    const Eigen::Vector3d tip = p + Eigen::Vector3d(
+      0.40 * std::cos(gt.chassis.yaw), 0.40 * std::sin(gt.chassis.yaw), 0.0);
+    m.points = {to_vec3(p), to_vec3(tip)};
     m.scale = {0.035f, 0.07f, 0.07f};
     m.color = to_rgba(0.0f, 0.94f, 1.0f, 1.0f);
     markers.push_back(m);
@@ -254,7 +256,7 @@ void SimNode::publish(double sim_t, uint64_t frame)
     {"true_w_ego", gt.chassis.w},
   });
 
-  publish_tfs(gt, cfg_.gimbal_offset);
+  publish_tfs(gt);
   publish_gt_markers(gt);
 }
 

@@ -33,7 +33,7 @@ yaw_raw       = armor_yaw_odom - gimbal.yaw
 | `true_center_*` / `true_armor_*` / `true_vel_*` | SimNode = `express_target_in_gimbal(gt)` | gimbal |
 | `kal_center_*` / `kal_vel_*` | TrackerNode = EKF | gimbal |
 | `err_*` | TrackerNode = Kalman − gimbal 真值 | gimbal |
-| TF | SimNode `plot_tfs`：`odom→chassis→gimbal`，`odom→robot` | odom 中间件 |
+| TF | SimNode `plot_tfs`：`odom→gimbal`，`odom→robot` | odom 中间件 |
 | `my_robot.*` / `robot.armor` | SimNode Marker | chassis / gimbal / robot |
 | `kalman.*` / `aim.lead` | TrackerNode Marker，`frame_id=gimbal` | gimbal |
 | 相机 HUD | main `plot_image` 读 `TrackerOutput.metrics` | 渲染 cam_pos=0 |
@@ -79,7 +79,7 @@ err_pos / err_vel        m / m/s
 
 | ns | id | 类型 | 发布 | frame_id |
 |---|---|---|---|---|
-| `my_robot.chassis` | 0 / 1 | SPHERE / ARROW | SimNode | `chassis` |
+| `my_robot.chassis` | 0 / 1 | SPHERE / ARROW | SimNode | `odom` |
 | `my_robot.gimbal` | 11 / 12 | SPHERE / ARROW | SimNode | `gimbal` |
 | `robot.armor` | i | CUBE | SimNode | `robot`（板位固定） |
 | `kalman.center` | 50 | SPHERE | TrackerNode | `gimbal` |
@@ -89,14 +89,14 @@ err_pos / err_vel        m / m/s
 
 装甲几何常量：灯条 56 mm、小板宽 135 mm、厚 15 mm。姿态 `armor_quat(yaw)` 带 15° pitch。
 
-Host 3D 侧栏按 `ns` 分组。TF 树：
+Host 3D 侧栏按 `ns` 分组。当前查看系只列出 TF 里真实存在的系（`odom` / `gimbal` / `robot`），**不要** `world`、`chassis`。选中某系时**只显示 `frame_id` 等于该系的 Marker**（不是把所有 Marker 变到该系原点）。
+
+TF 树：
 
 ```
-odom → chassis → gimbal
+odom → gimbal
 odom → robot
 ```
-
-默认查看 `gimbal`。切 `odom` 时 Host 用 TF 把 Marker 变过去。
 
 ## 图像
 
