@@ -47,7 +47,7 @@ cmake --build cmake-build-debug
 ./cmake-build-debug/sim_waggle configs/sim_waggle.yaml
 ```
 
-调参编辑 `configs/sim_waggle.yaml`（`chassis_w`、`gimbal_offset`、`measurement.noise_acc_std`、`ekf.q_u_acc_var`）。
+调参编辑 `configs/sim_waggle.yaml`（`chassis_w`、`gimbal_offset`、`measurement.noise_acc_std`、`ekf.M`）。
 
 ---
 
@@ -108,7 +108,7 @@ xy 用已知加速度的常加速离散，其余仍 CV。真实过程是
 
 - $F$：各通道 CV 块 $\begin{bmatrix}1 & dt\\ 0 & 1\end{bmatrix}$（位置-速度）以及 $r,l,h$ 的恒等。
 - $\mathbf{u}=(u_x,u_y)^\top$：tracker **实际吃到**的加速度。仿真侧 $\mathbf{u}=\hat{\mathbf{u}}+\mathbf{m}$，不是完美 IMU。
-- $\mathbf{m}\sim\mathcal{N}(\mathbf{0},M)$，$M=\sigma_u^2 I_2$。$\sigma_u$ 是 YAML `measurement.noise_acc_std`；滤波里用 `ekf.q_u_acc_var` 作为 $\sigma_u^2$（默认都是 $1$，即 $M=I_2$）。
+- $\mathbf{m}\sim\mathcal{N}(\mathbf{0},M)$。仿真侧 $\sigma_u$ 是 YAML `measurement.noise_acc_std`（各轴独立 $\mathcal{N}(0,\sigma_u^2)$）；滤波侧 $M$ 是 YAML `ekf.M`（2×2，默认 $I_2$）。对角元应对齐 $\sigma_u^2$。
 - $\mathbf{w}\sim\mathcal{N}(\mathbf{0},Q)$：只覆盖**未建模**的 $z$、$\psi$（分段白噪声，参数仍是 `q_xyz_acc_var` / `q_yaw_acc_var`）以及敌车真实机动残差。**xy 不再走原来的未知加速度 $Q_{xyz}$ 块**——未知量已经在 $u$ 上。
 - 假设 $\mathbf{w}\perp\mathbf{m}$，没有交叉项 $S=\mathbb{E}[\mathbf{w}\mathbf{m}^\top]$。
 
@@ -197,12 +197,12 @@ P = (I-KH)P(I-KH)^\top + KRK^\top
 | 字段 | 含义 | 默认 |
 |---|---|---|
 | `measurement.enable_noise` | 同时开关相机噪声与加速度噪声 | true |
-| `measurement.noise_acc_std` | 仿真 $m$ 的 $\sigma_u$（m/s²） | 1.0 |
-| `ekf.q_u_acc_var` | 滤波 $M=\sigma_u^2 I_2$（(m/s²)²） | 1.0 |
+| `measurement.noise_acc_std` | 仿真 IMU 高斯噪声标准差 $\sigma_u$（m/s²） | 1.0 |
+| `ekf.M` | 控制噪声协方差 $2\times 2$（(m/s²)²），`P += B M Bᵀ` | `[[1,0],[0,1]]` |
 | `ekf.q_xyz_acc_var` | 本分支只还用于 **$z$** 的分段白噪声 | 100 |
 | `ekf.q_yaw_acc_var` | $\psi$ 角加速度方差 | 75 |
 
-两个加速度参数应对齐：`q_u_acc_var` $\approx$ `(noise_acc_std)²`。只改一边会让 NIS / 误差和模型不一致。
+`M` 对角元应对齐 `(noise_acc_std)²`。只改一边会让 NIS / 误差和模型不一致。仍接受旧字段 `ekf.q_u_acc_var`（标量，当作 $M=\sigma^2 I_2$）。
 
 ### 3.8 怎样判断实验成立
 

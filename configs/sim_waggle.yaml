@@ -21,12 +21,16 @@ measurement:
   enable_noise: true
   noise_pos_std: 0.005            # 观测位置噪声标准差 (m)
   noise_yaw_std: 0.01             # 观测装甲板角噪声标准差 (rad)
-  noise_acc_std: 1.0              # 自车 xy 加速度噪声标准差 (m/s^2)，与 ekf.q_u_acc_var 对齐
+  noise_acc_std: 1.0              # 仿真 IMU xy 高斯噪声标准差 σ_u (m/s^2)；u = û + N(0, σ_u²)
 
 ekf:
   q_xyz_acc_var: 100.0            # 未建模 z 加速度方差
   q_yaw_acc_var: 75.0             # 角加速度方差
-  q_u_acc_var: 1.0                # 控制量 ax,ay 噪声 (m/s^2)^2，Q += B Qu Bᵀ
+  # 控制噪声协方差 M (2×2)，单位 (m/s^2)^2。control 步 P += B M Bᵀ
+  # 对角元应对齐 (noise_acc_std)²；默认 σ_u=1 → M = I₂
+  M:
+    - [1.0, 0.0]
+    - [0.0, 1.0]
   r_yaw: 0.04                     # yaw 观测噪声
   r_pitch: 0.04                   # pitch 观测噪声
   r_dist_base: 0.015              # 距离观测噪声基础值
