@@ -9,7 +9,7 @@
 #include "types.hpp"
 #include "channel.hpp"
 #include "metrics.hpp"
-#include "baseline_tracker.hpp"
+#include "ego_control_tracker.hpp"
 
 namespace tracker
 {
@@ -20,7 +20,7 @@ class TrackerNode
 {
 public:
   TrackerNode(
-    std::unique_ptr<BaselineTracker> tracker,
+    std::unique_ptr<EgoControlTracker> tracker,
     common::Channel<common::StampedObservation> & obs_in,
     common::LatestSlot<common::TrackerOutput> & est_out,
     common::LatestSlot<common::GroundTruth> & gt_in,
@@ -36,7 +36,7 @@ private:
   void publish_kalman_markers(
     const common::TargetEstimate & est, const Eigen::Vector3d & aim_lead_pt);
 
-  std::unique_ptr<BaselineTracker> tracker_;
+  std::unique_ptr<EgoControlTracker> tracker_;
   common::Channel<common::StampedObservation> & obs_in_;
   common::LatestSlot<common::TrackerOutput> & est_out_;
   common::LatestSlot<common::GroundTruth> & gt_in_;

@@ -53,7 +53,7 @@ Eigen::Quaterniond armor_quat(double yaw)
 }  // namespace
 
 TrackerNode::TrackerNode(
-  std::unique_ptr<BaselineTracker> tracker,
+  std::unique_ptr<EgoControlTracker> tracker,
   common::Channel<common::StampedObservation> & obs_in,
   common::LatestSlot<common::TrackerOutput> & est_out,
   common::LatestSlot<common::GroundTruth> & gt_in,
@@ -186,6 +186,7 @@ void TrackerNode::run()
   double last_t = -1.0;
 
   while (!stop_requested_.load() && obs_in_.wait_pop(msg)) {
+    tracker_->set_control(msg.ego_acc);
     if (last_t < 0.0) {
       tracker_->update(msg.obs);
     } else {

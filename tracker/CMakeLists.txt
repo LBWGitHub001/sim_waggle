@@ -7,6 +7,7 @@ add_library(tracker_node STATIC
   math_tools.cpp
   target.cpp
   baseline_tracker.cpp
+  ego_control_tracker.cpp
   tracker_node.cpp
 )
 

@@ -13,7 +13,7 @@
 #include "common/types.hpp"
 #include "common/channel.hpp"
 #include "sim/sim_node.hpp"
-#include "tracker/baseline_tracker.hpp"
+#include "tracker/ego_control_tracker.hpp"
 #include "tracker/tracker_node.hpp"
 #include "render/camera_detector_renderer.hpp"
 
@@ -125,7 +125,7 @@ int main(int argc, char * argv[])
 
   sim::SimNode sim_node(cfg.sim, {obs_channel, gt_slot, obs_slot});
 
-  auto tracker = std::make_unique<tracker::BaselineTracker>(
+  auto tracker = std::make_unique<tracker::EgoControlTracker>(
     cfg.sim.target_radius, cfg.sim.armor_num, cfg.ekf, cfg.p0);
   const std::string tracker_name = tracker->name();
   tracker::TrackerNode tracker_node(

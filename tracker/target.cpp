@@ -73,6 +73,11 @@ void Target::predict(std::chrono::steady_clock::time_point t)
 
 void Target::predict(double dt)
 {
+  predict(dt, Eigen::Vector3d::Zero());
+}
+
+void Target::predict(double dt, const Eigen::Vector3d & acc)
+{
   // 状态转移矩阵
   // clang-format off
   Eigen::MatrixXd F{
@@ -113,8 +118,13 @@ void Target::predict(double dt)
   };
   // clang-format on
 
+  const double dt2 = 0.5 * dt * dt;
   auto f = [&](const Eigen::VectorXd & x) -> Eigen::VectorXd {
     Eigen::VectorXd x_prior = F * x;
+    x_prior[0] += dt2 * acc.x();
+    x_prior[1] += dt * acc.x();
+    x_prior[2] += dt2 * acc.y();
+    x_prior[3] += dt * acc.y();
     x_prior[6] = tools::limit_rad(x_prior[6]);
     return x_prior;
   };

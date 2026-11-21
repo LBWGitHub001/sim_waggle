@@ -39,6 +39,7 @@ public:
 
   void predict(std::chrono::steady_clock::time_point t);
   void predict(double dt);
+  void predict(double dt, const Eigen::Vector3d & acc);
 
   void update(const Armor & armor);
 
