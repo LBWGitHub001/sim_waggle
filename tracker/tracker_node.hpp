@@ -8,7 +8,7 @@
 
 #include "types.hpp"
 #include "channel.hpp"
-#include "itracker.hpp"
+#include "baseline_tracker.hpp"
 
 namespace tracker
 {
@@ -21,10 +21,10 @@ namespace tracker
 class TrackerNode
 {
 public:
-  // tracker: 由接线层构造注入（多态接口，方便替换补偿算法）；
+  // tracker: 由接线层构造注入（本分支具体类型 BaselineTracker）；
   // obs_in / est_out: 话题通道，生命周期需长于本节点
   TrackerNode(
-    std::unique_ptr<ITracker> tracker,
+    std::unique_ptr<BaselineTracker> tracker,
     common::Channel<common::StampedObservation> & obs_in,
     common::LatestSlot<common::TrackerOutput> & est_out);
 
@@ -36,7 +36,7 @@ public:
 private:
   void run();
 
-  std::unique_ptr<ITracker> tracker_;
+  std::unique_ptr<BaselineTracker> tracker_;
   common::Channel<common::StampedObservation> & obs_in_;
   common::LatestSlot<common::TrackerOutput> & est_out_;
 

@@ -1,7 +1,7 @@
 ---
 name: sim-waggle-interfaces
 description: >-
-  Documents sim_waggle package interfaces, ITracker contract, message types,
+  Documents sim_waggle package interfaces, concrete tracker types, message types,
   coordinate frames, OmniScope telemetry keys, and the main-as-base / algorithm-branch
   workflow. Use when adding a tracker algorithm, branching from main, changing
   SimNode/TrackerNode, YAML config, plot keys, 3D markers, metrics, common types,
@@ -12,7 +12,7 @@ description: >-
 
 注意主分支是一个总体的基，其他的算法尝试都是基于main的一系列分支。
 
-`main` 是稳定仿真平台（物理、观测、通道、可视化、基线 EKF）。任何新算法都从 `main` 开分支，在分支上换 `ITracker` 实现；不要把未验证算法合回 `main`。
+`main` 是稳定仿真平台（物理、观测、通道、可视化、基线 EKF）。任何新算法都从 `main` 开分支，在分支上换成该分支自己的具体 tracker 类；不要虚基类、不要继承多态；不要把未验证算法合回 `main`。
 
 ## 先读哪份
 
@@ -57,18 +57,18 @@ sim/  ──Channel<StampedObservation>──►  tracker/
 ## 算法接入（分支上做）
 
 1. `git checkout main && git checkout -b exp/<algo-name>`
-2. 在 `tracker/` 新增 `ITracker` 实现，注册进 `tracker/CMakeLists.txt`
-3. `app/main.cpp` 里把 `BaselineTracker` 换成新类型（构造参数可从 YAML 加字段）
-4. 需要自车运动时：**加性**扩展 `StampedObservation`（如 `gimbal_pos/vel`、`chassis_w`），`SimNode::publish` 填，新 tracker 读；`BaselineTracker` 忽略新字段
+2. 在 `tracker/` 新增具体 tracker 类（无基类、无 `virtual`），注册进 `tracker/CMakeLists.txt`
+3. 把 `TrackerNode` 持有的具体类型、以及 `app/main.cpp` 的构造改成新类（构造参数可从 YAML 加字段）
+4. 需要自车运动时：**加性**扩展 `StampedObservation`（如 `gimbal_pos/vel`、`chassis_w`、`ego_acc`），`SimNode::publish` 填；在该分支 `TrackerNode::run` 里把新字段交给具体 tracker
 5. `TargetEstimate` 必须填 `center/velocity/yaw/w/radius/armor_xyza_list`；`x.size() >= 11`（metrics / plot / marker 都卡这个）
 6. 允许新增 `omniscope::plot` 键；**禁止改名**已有键（`obs_*` / `true_*` / `kal_*`）
 
-`ITracker` 合同（`tracker/itracker.hpp`）：
+具体 tracker 约定方法（不是虚接口，只是各分支自己实现同名成员）：
 
 ```
 init(obs, t)
 predict(dt)
-update(obs)            // 未 init 时实现内部应自动 init（BaselineTracker 如此）
+update(obs)            // 未 init 时内部应自动 init
 estimate() -> TargetEstimate
 predict_aim_point(flight_time)
 diverged() / last_nis() / name()
@@ -92,7 +92,7 @@ tracker::TrackerNode tracker_node(std::move(tracker), obs_channel, est_slot);
 | `Channel<T>` | FIFO，`push` 不阻塞；`close` 后排空才返回 false |
 | `LatestSlot<T>` | keep_last(1)，可视化只读拷贝 |
 | `SimNode` | fps 推进；先发 t=0；话题：`obs_out` / `gt_out` / `obs_latest` |
-| `TrackerNode` | 注入 `unique_ptr<ITracker>`；消费 FIFO，写 `est_out` |
+| `TrackerNode` | 注入 `unique_ptr<本分支具体 Tracker>`；消费 FIFO，写 `est_out` |
 | 收尾 | `sim.stop(); sim.join(); tracker.join();`（sim 关通道） |
 
 仿真时钟 `sim_t = frame * dt`，与墙钟无关。传感器 RNG 种子 42，可复现。
@@ -118,4 +118,5 @@ main 上的实现是 `tracker::BaselineTracker`，忠实还原 auto_aim，**不�
 - 不改 OmniScope 源码
 - 不把实验合进 `main`，除非明确要求提升为新基线
 - 可视化线程只读 LatestSlot，不碰节点内部状态
-- `aim.lead` 用 `common::compute_aim_lead_point(est, flight_time)`，不要跨线程调 `ITracker::predict_aim_point`
+- 不引入虚函数 / 继承多态切换算法（每个分支一个具体 tracker 类型）
+- `aim.lead` 用 `common::compute_aim_lead_point(est, flight_time)`，不要跨线程调 tracker 的 `predict_aim_point`

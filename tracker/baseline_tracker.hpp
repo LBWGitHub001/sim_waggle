@@ -2,7 +2,8 @@
 #define TRACKER__BASELINE_TRACKER_HPP
 
 #include <memory>
-#include "itracker.hpp"
+#include <string>
+#include "types.hpp"
 #include "target.hpp"
 #include "extended_kalman_filter.hpp"
 
@@ -12,7 +13,7 @@ namespace tracker
 /// 基线卡尔曼追踪器 (BaselineTracker)
 /// 封装 auto_aim 原版 Target 与 11 维 EKF 模型，
 /// 保持原算法逻辑 100% 忠实还原。
-class BaselineTracker : public ITracker
+class BaselineTracker
 {
 public:
   BaselineTracker(
@@ -21,15 +22,15 @@ public:
     const auto_aim::EkfParams & ekf_params = auto_aim::EkfParams{},
     const Eigen::VectorXd & p0 = Eigen::VectorXd::Zero(11));
 
-  void init(const common::ArmorObservation & init_obs, double t) override;
-  void predict(double dt) override;
-  void update(const common::ArmorObservation & obs) override;
+  void init(const common::ArmorObservation & init_obs, double t);
+  void predict(double dt);
+  void update(const common::ArmorObservation & obs);
 
-  common::TargetEstimate estimate() const override;
-  Eigen::Vector3d predict_aim_point(double flight_time) const override;
-  bool diverged() const override;
-  double last_nis() const override;
-  std::string name() const override { return "BaselineTracker"; }
+  common::TargetEstimate estimate() const;
+  Eigen::Vector3d predict_aim_point(double flight_time) const;
+  bool diverged() const;
+  double last_nis() const;
+  std::string name() const { return "BaselineTracker"; }
 
 private:
   auto_aim::Armor to_auto_aim_armor(const common::ArmorObservation & obs) const;

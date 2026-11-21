@@ -8,7 +8,7 @@ namespace tracker
 {
 
 TrackerNode::TrackerNode(
-  std::unique_ptr<ITracker> tracker,
+  std::unique_ptr<BaselineTracker> tracker,
   common::Channel<common::StampedObservation> & obs_in,
   common::LatestSlot<common::TrackerOutput> & est_out)
 : tracker_(std::move(tracker)), obs_in_(obs_in), est_out_(est_out)
@@ -35,7 +35,7 @@ void TrackerNode::run()
 
   while (!stop_requested_.load() && obs_in_.wait_pop(msg)) {
     if (last_t < 0.0) {
-      // 首帧观测：直接 update（ITracker 实现内部自动 init，等价旧流程 init(obs, 0.0)）
+      // 首帧观测：直接 update（tracker 内部自动 init，等价旧流程 init(obs, 0.0)）
       tracker_->update(msg.obs);
     } else {
       // 后续帧：predict(距上帧的仿真时长) + update

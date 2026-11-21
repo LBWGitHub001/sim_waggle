@@ -32,7 +32,8 @@ git checkout -b exp/<short-name>
 
 **通常改（分支上）：**
 
-- `tracker/<algo>_tracker.hpp/.cpp` — 新 `ITracker`
+- `tracker/<algo>_tracker.hpp/.cpp` — 新的具体 tracker 类（无基类）
+- `tracker/tracker_node.hpp/.cpp` — 把持有类型改成新类
 - `tracker/CMakeLists.txt` — 加入 `.cpp`
 - `app/main.cpp` — 构造新 tracker（`#include` + `make_unique`）
 - `configs/sim_waggle.yaml` — 可选 `algo:` 节
@@ -42,7 +43,7 @@ git checkout -b exp/<short-name>
 
 - `sim/kinematics.*` 物理
 - 世界系定义（原点=云台、轴向固定）；S1 若改到场地惯性系，须在提交说明写清
-- `ITracker` 虚函数签名（要新输入就扩消息，或给派生类加构造参数）
+- 不要引入 `ITracker` / `virtual` / 继承多态来切换算法
 - `thirdparty/OmniScope`
 - 已有 plot 键名、Marker `ns/id`（可新增）
 
@@ -50,34 +51,29 @@ git checkout -b exp/<short-name>
 
 ## 自车状态怎么送进滤波
 
-`ITracker::update` 只有 `ArmorObservation`。需要 `p_g/v_g/ω_c` 时：
+`update(obs)` 只有 `ArmorObservation`。需要 `p_g/v_g/ω_c` 时：
 
 1. 在 `StampedObservation` 末尾加字段（带默认值，旧代码仍编译）
 2. `SimNode::publish` 从 `gt.gimbal` / `gt.chassis` 填写
-3. 新 tracker 在 `TrackerNode` 里看不到 `StampedObservation` 全文——节点目前只把 `msg.obs` 传给 `update`
-
-因此有两条路，选一：
-
-- **A（推荐，接口仍干净）**：把自车量拷进 `ArmorObservation` 的新字段，或
-- **B**：扩展 `ITracker::update` 为 `update(obs, sim_t)` / 增加 `update_stamped(StampedObservation)` — 这会改基类，本分支里让 `BaselineTracker` 转调旧 `update`
+3. 在本分支的 `TrackerNode::run` 里把新字段交给具体 tracker，不要为此引入虚基类
 
 不要为了传 ω 去 include `sim/kinematics.hpp`。
 
 构造期常量（固定 `chassis_w`、`gimbal_offset`）可以直接从 YAML 注入构造函数，不必走消息。时变量必须走消息。
 
-## 新 ITracker 最小骨架
+## 新 tracker 最小骨架
 
 ```cpp
-class CompensatedTracker : public ITracker {
+class CompensatedTracker {
 public:
-  void init(const common::ArmorObservation& obs, double t) override;
-  void predict(double dt) override;
-  void update(const common::ArmorObservation& obs) override; // 空则 init
-  common::TargetEstimate estimate() const override;
-  Eigen::Vector3d predict_aim_point(double flight_time) const override;
-  bool diverged() const override;
-  double last_nis() const override;
-  std::string name() const override { return "CompensatedTracker"; }
+  void init(const common::ArmorObservation& obs, double t);
+  void predict(double dt);
+  void update(const common::ArmorObservation& obs); // 空则 init
+  common::TargetEstimate estimate() const;
+  Eigen::Vector3d predict_aim_point(double flight_time) const;
+  bool diverged() const;
+  double last_nis() const;
+  std::string name() const { return "CompensatedTracker"; }
 };
 ```
 

@@ -121,9 +121,11 @@ start() / stop() / join() / finished() / frames_published()
 
 ## 3. `tracker/` — 滤波
 
-### `ITracker`（`itracker.hpp`）
+### 具体 tracker（无虚基类）
 
-见 SKILL.md。实现必须线程内同步调用（TrackerNode 单线程）。
+不要 `ITracker`、不要 `virtual`、不要继承多态。每个分支 `TrackerNode` 持有该分支自己的具体类型。实现必须线程内同步调用（TrackerNode 单线程）。
+
+`main` 上是 `BaselineTracker`。实验分支把 `TrackerNode` 的持有类型换成新类，不要再加基类。
 
 ### `BaselineTracker`
 
@@ -165,7 +167,7 @@ update(z, H, R, z_subtract) / update(z, H, R, h, z_subtract)
 ### `TrackerNode`
 
 ```
-TrackerNode(unique_ptr<ITracker>, Channel<StampedObservation>&, LatestSlot<TrackerOutput>&)
+TrackerNode(unique_ptr<BaselineTracker>, Channel<StampedObservation>&, LatestSlot<TrackerOutput>&)
 start() / stop() / join() / finished()
 ```
 

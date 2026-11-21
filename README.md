@@ -42,7 +42,6 @@ sim_waggle/
 │
 ├── tracker/                    # 【包 tracker_node】追踪节点（编译期看不到 sim 头文件）
 │   ├── CMakeLists.txt
-│   ├── itracker.hpp            # 抽象追踪器接口 (为 Phase 2 偏置补偿算法提供多态基类)
 │   ├── baseline_tracker.hpp/.cpp  # 原版未补偿 EKF 基线实现
 │   ├── target.hpp/.cpp         # 目标运动模型与 11 维状态转移/观测雅可比
 │   ├── extended_kalman_filter.hpp/.cpp # 约瑟夫形式协方差更新与卡方检验
