@@ -6,6 +6,7 @@
 #include <vector>
 #include <yaml-cpp/yaml.h>
 #include <fmt/format.h>
+#include <Eigen/Geometry>
 #include <omniscope/omniscope.hpp>
 
 #include "common/types.hpp"
@@ -136,6 +137,36 @@ omniscope::Vector3 to_vec3(const Eigen::Vector3d & v)
 omniscope::ColorRGBA to_rgba(float r, float g, float b, float a = 1.0f)
 {
   return {r, g, b, a};
+}
+
+omniscope::TransformStamped make_tf(
+  const std::string & parent,
+  const std::string & child,
+  const Eigen::Vector3d & translation,
+  double yaw)
+{
+  omniscope::TransformStamped tf;
+  tf.parent = parent;
+  tf.child = child;
+  tf.translation = to_vec3(translation);
+  const Eigen::Quaterniond q(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+  tf.rotation = eigen_quat_to_omni(q);
+  return tf;
+}
+
+void publish_tfs(const common::GroundTruth & gt)
+{
+  // 世界系 gimbal.pos≡0 ⇒ 惯性云台位置 = 惯性敌心 − 世界系表观敌心；
+  // 无惯性真值时退回 −chassis.pos（底盘惯性原点为 0）。
+  Eigen::Vector3d p_gimbal = gt.target_inertial.center - gt.target.center;
+  if (p_gimbal.norm() < 1e-12) p_gimbal = -gt.chassis.pos;
+  const Eigen::Vector3d p_chassis = p_gimbal + gt.chassis.pos;
+
+  omniscope::plot_tfs({
+    make_tf("field", "world", p_gimbal, 0.0),
+    make_tf("field", "chassis", p_chassis, gt.chassis.yaw),
+    make_tf("field", "gimbal", p_gimbal, gt.gimbal.yaw),
+  });
 }
 
 void publish_3d_markers(
@@ -323,6 +354,7 @@ void publish_3d_markers(
   }
 
   omniscope::RemoteLogger::instance().plot_markers(markers);
+  publish_tfs(gt);
 }
 }  // namespace
 

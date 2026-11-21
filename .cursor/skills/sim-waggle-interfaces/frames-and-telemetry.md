@@ -31,7 +31,8 @@ xyz_in_world  = r_g2a
 | `obs_armor_*` | SimNode = `obs.xyz_in_world`（世界系） |
 | `true_center_*` / `true_armor_*` / `true_vel_*` | SimNode = `gt.target_inertial.*` |
 | `kal_center_*` / `kal_vel_*` | TrackerNode = EKF（世界系） |
-| 3D Marker | `app/main.cpp`，`frame_id="world"` |
+| 3D Marker | `app/main.cpp`，`frame_id="world"`；Host 按 TF 变到当前查看系 |
+| TF | `app/main.cpp` `plot_tfs`：`field→{world,chassis,gimbal}` |
 | `err_*` | `app/main.cpp` = Kalman − `target_inertial` |
 
 `kal_center_*` 对齐 `true_center_*` 时**不应贴死**：差一个杆臂圆。`obs_armor_*` 也不再和惯性系 `true_armor_*` 重合。
@@ -92,6 +93,14 @@ err_pos / err_vel        m / m/s
 | `aim.lead` | 80 / 82 | SPHERE / LINE_LIST | 超前落点；射线从世界原点（云台）射出 |
 
 装甲几何常量：灯条 56 mm、小板宽 135 mm、厚 15 mm。姿态 `armor_quat(yaw)` 带 15° pitch。
+
+Host 3D 侧栏按 `ns` 分组（整组开关 + 组内 Marker 下拉）。视口默认查看 `world`；`plot_tfs` 树：
+
+```
+field → world    T = (p_gimbal, I)
+field → chassis  T = (p_chassis, Rz(yaw_c))
+field → gimbal   T = (p_gimbal, Rz(yaw_g))
+```
 
 ## 图像
 

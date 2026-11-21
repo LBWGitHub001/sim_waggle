@@ -45,7 +45,7 @@ sim/  ──Channel<StampedObservation>──►  tracker/
 
 - `sim/` 与 `tracker/` 是独立 CMake 包，**编译期互相看不见头文件**。唯一耦合是 `common/`。
 - 禁止 `#include` 对面包的头。需要新数据就**加性**扩 `common` 消息，不要开第二套类型。
-- `thirdparty/OmniScope` 只读 SDK。遥测直接 `omniscope::plot` / `plot_markers` / `plot_image`，不设 bridge。
+- `thirdparty/OmniScope`：未点名时不改 SDK 源码；Host UI / 协议可按任务**加性**扩展。遥测直接 `omniscope::plot` / `plot_markers` / `plot_tfs` / `plot_image`，不设 bridge。
 
 ## 坐标系（必守）
 
@@ -128,7 +128,7 @@ main 上的实现是 `tracker::BaselineTracker`，忠实还原 auto_aim，**不�
 - 每完成一步就 `git commit`（见上文「Git：每一步都提交」）
 - 不改世界系定义（原点=云台中心，轴向固定）；敌车平移真值用 `target_inertial`，不用表观 `target.vel`
 - 不让 `sim/` 看见 `tracker/`，反之亦然
-- 不改 OmniScope 源码
+- 不改 OmniScope 源码（除非任务明确要求改 Host / 加性协议）
 - 不把实验合进 `main`，除非明确要求提升为新基线
 - 可视化线程只读 LatestSlot，不碰节点内部状态
 - 不引入虚函数 / 继承多态切换算法（每个分支一个具体 tracker 类型）
