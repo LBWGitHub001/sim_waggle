@@ -257,9 +257,14 @@ void SimNode::publish(double sim_t, uint64_t frame)
   topics_.gt_out.set(gt);
 
   const auto obs = sensor_.observe(gt);
-  common::StampedObservation msg{obs, sim_t, frame};
+  common::StampedObservation msg;
+  msg.obs = obs;
+  msg.sim_t = sim_t;
+  msg.frame = frame;
+  const Eigen::Vector3d a = kinematics_.origin_acc();
+  msg.ego_acc = Eigen::Vector3d(-a.x(), -a.y(), 0.0);
   topics_.obs_latest.set(msg);
-  topics_.obs_out.push(std::move(msg));
+  topics_.obs_out.push(msg);
 
   const common::TargetState enemy = common::express_target_in_gimbal(gt);
   Eigen::Vector3d true_armor = Eigen::Vector3d::Zero();
@@ -293,6 +298,8 @@ void SimNode::publish(double sim_t, uint64_t frame)
     {"true_yaw_deg", enemy.yaw * 180.0 / M_PI},
     {"true_w", enemy.w},
     {"true_w_ego", gt.chassis.w},
+    {"ego_acc_x", msg.ego_acc.x()},
+    {"ego_acc_y", msg.ego_acc.y()},
   });
 
   publish_tfs(gt);

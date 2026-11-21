@@ -113,6 +113,7 @@ struct StampedObservation
   ArmorObservation obs;
   double sim_t = 0.0;    // 确定性仿真时钟（frame * dt），与墙钟无关
   uint64_t frame = 0;
+  Eigen::Vector3d ego_acc = Eigen::Vector3d::Zero(); // gimbal 系 xy 加速度控制量，z 不用
 };
 
 // Kalman − gimbal 系真值。放在 types 以便 TrackerOutput 携带，避免 metrics↔types 循环。
