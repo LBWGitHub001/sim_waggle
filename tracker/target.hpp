@@ -17,7 +17,8 @@ namespace auto_aim
 struct EkfParams {
   double q_xyz_acc_var = 100.0;  // Q 矩阵：未建模加速度（z；xy 由控制量承担）
   double q_yaw_acc_var = 75.0;   // Q 矩阵：角加速度方差
-  Eigen::Matrix2d M = Eigen::Matrix2d::Identity();  // 控制噪声协方差，P += B M Bᵀ
+  double m_ax = 1.0;             // M 对角：ax 方差 (m/s^2)^2，P += B M Bᵀ
+  double m_ay = 1.0;             // M 对角：ay 方差 (m/s^2)^2
   double r_yaw = 4.0e-2;         // R 矩阵：yaw 观测噪声
   double r_pitch = 4.0e-2;       // R 矩阵：pitch 观测噪声
   double r_dist_base = 1.5e-2;   // R 矩阵：距离观测噪声基础值

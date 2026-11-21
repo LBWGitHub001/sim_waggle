@@ -174,7 +174,7 @@ struct SimulationConfig
   bool enable_noise = true;
   double noise_pos_std = 0.005;
   double noise_yaw_std = 0.01;
-  double noise_acc_std = 1.0;  // 仿真 IMU xy 高斯噪声标准差 (m/s^2)；应对齐 ekf.M 对角元开方
+  double noise_acc_std = 1.0;  // 仿真 IMU xy 高斯噪声标准差 (m/s^2)；应对齐 ekf.m_ax / m_ay 开方
 
   // 仿真运行
   int fps = 50;

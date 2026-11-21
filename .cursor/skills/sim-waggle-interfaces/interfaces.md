@@ -149,12 +149,12 @@ predict(dt)                 // Target::predict：只 Fx
 control(ego_acc)            // Target::control：Bu + B M Bᵀ，gimbal xy，z 忽略
 ```
 
-过程 `x = Fx + B(u+m) + w`。`u` 是 SimNode 发出的带噪加速度（真值 `(-a_x,-a_y)` 加 `N(0,σ²)`，`σ=noise_acc_std`）。`B` 为 11×2（`½dt²/dt` 进 xc/vx 与 yc/vy）。控制噪声协方差 YAML `ekf.M`（2×2）。xy 不再用 `q_xyz_acc_var`。推导见仓库 README 第 3 节。
+过程 `x = Fx + B(u+m) + w`。`u` 是 SimNode 发出的带噪加速度（真值 `(-a_x,-a_y)` 加 `N(0,σ²)`，`σ=noise_acc_std`）。`B` 为 11×2（`½dt²/dt` 进 xc/vx 与 yc/vy）。`M = diag(m_ax, m_ay)`。xy 不再用 `q_xyz_acc_var`。推导见仓库 README 第 3 节。
 
 ### `auto_aim::Target` / `EkfParams`
 
 ```
-EkfParams { q_xyz_acc_var=100, q_yaw_acc_var=75, M=I₂, r_yaw=0.04, r_pitch=0.04, r_dist_base=0.015 }
+EkfParams { q_xyz_acc_var=100, q_yaw_acc_var=75, m_ax=1, m_ay=1, r_yaw=0.04, r_pitch=0.04, r_dist_base=0.015 }
 Target(armor, t, radius, armor_num, P0_dig, ekf_params)
 predict(dt) / control(acc) / update(armor)
 ekf_x() / ekf() / armor_xyza_list() / diverged()
@@ -232,7 +232,7 @@ Host：`thirdparty/OmniScope/host/start.sh`，门户 `http://127.0.0.1:8080`。
 | `measurement.noise_yaw_std` | rad | 0.01 |
 | `measurement.noise_acc_std` | 仿真 IMU xy 高斯噪声 σ (m/s²) | 1.0 |
 | `ekf.q_xyz_acc_var / q_yaw_acc_var` | z / yaw 未建模加速度 | 100 / 75 |
-| `ekf.M` | 2×2 控制噪声协方差，`P += B M Bᵀ` | `[[1,0],[0,1]]` |
+| `ekf.m_ax` / `m_ay` | `M=diag(m_ax,m_ay)`，`P += B M Bᵀ` | 1.0 / 1.0 |
 | `ekf.r_yaw / r_pitch / r_dist_base` | | 0.04 / 0.04 / 0.015 |
 | `ekf.p0` | 11 维对角 | `1,64,1,64,1,64,0.4,400,1e-5,1,1` |
 | `remote_logger.*` | `omniscope::RemoteLogger::Config` | 见 yaml |

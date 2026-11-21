@@ -75,21 +75,8 @@ AppConfig load_config(const std::string & path)
     auto ekf_n = yaml["ekf"];
     cfg.ekf.q_xyz_acc_var = ekf_n["q_xyz_acc_var"].as<double>(100.0);
     cfg.ekf.q_yaw_acc_var = ekf_n["q_yaw_acc_var"].as<double>(75.0);
-    cfg.ekf.M = Eigen::Matrix2d::Identity();
-    if (ekf_n["M"]) {
-      const YAML::Node m_n = ekf_n["M"];
-      if (m_n.IsSequence() && m_n.size() == 2 && m_n[0].IsSequence()) {
-        cfg.ekf.M(0, 0) = m_n[0][0].as<double>(1.0);
-        cfg.ekf.M(0, 1) = m_n[0][1].as<double>(0.0);
-        cfg.ekf.M(1, 0) = m_n[1][0].as<double>(0.0);
-        cfg.ekf.M(1, 1) = m_n[1][1].as<double>(1.0);
-      } else if (m_n.IsSequence() && m_n.size() == 4) {
-        cfg.ekf.M << m_n[0].as<double>(1.0), m_n[1].as<double>(0.0),
-                     m_n[2].as<double>(0.0), m_n[3].as<double>(1.0);
-      }
-    } else if (ekf_n["q_u_acc_var"]) {
-      cfg.ekf.M = Eigen::Matrix2d::Identity() * ekf_n["q_u_acc_var"].as<double>(1.0);
-    }
+    cfg.ekf.m_ax = ekf_n["m_ax"].as<double>(1.0);
+    cfg.ekf.m_ay = ekf_n["m_ay"].as<double>(1.0);
     cfg.ekf.r_yaw = ekf_n["r_yaw"].as<double>(0.04);
     cfg.ekf.r_pitch = ekf_n["r_pitch"].as<double>(0.04);
     cfg.ekf.r_dist_base = ekf_n["r_dist_base"].as<double>(0.015);

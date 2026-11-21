@@ -114,7 +114,10 @@ void Target::control(const Eigen::Vector3d & acc)
   B(2, 1) = dt2;
   B(3, 1) = dt;
   const Eigen::Vector2d u(acc.x(), acc.y());
-  ekf_.control(B, u, ekf_params_.M);
+  Eigen::Matrix2d M = Eigen::Matrix2d::Zero();
+  M(0, 0) = ekf_params_.m_ax;
+  M(1, 1) = ekf_params_.m_ay;
+  ekf_.control(B, u, M);
 }
 
 void Target::update(const Armor & armor)
