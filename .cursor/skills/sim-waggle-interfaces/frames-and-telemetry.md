@@ -77,16 +77,16 @@ err_pos / err_vel        m / m/s
 
 ## 3D Marker 命名空间
 
-| ns | id | 类型 | 发布 | frame_id |
-|---|---|---|---|---|
-| `my_robot.chassis` | 0 / 1 | SPHERE / ARROW | SimNode | `odom` |
-| `my_robot.gimbal` | 11 / 12 | SPHERE / ARROW | SimNode | `gimbal` |
-| `robot.center` | 0 | SPHERE | SimNode | `robot`（原点） |
-| `robot.armor` | i | CUBE | SimNode | `robot`（板位固定） |
-| `kalman.center` | 50 | SPHERE | TrackerNode | `gimbal` |
-| `kalman.vel` | 52 | ARROW | TrackerNode | `gimbal` |
-| `kalman.armor` | 60+i / 70 | CUBE / LINE_LIST | TrackerNode | `gimbal` |
-| `aim.lead` | 80 / 82 | SPHERE / LINE_LIST | TrackerNode | `gimbal`（射线从原点） |
+| ns | id | 类型 | 发布 | frame_id | 颜色 |
+|---|---|---|---|---|---|
+| `my_robot.chassis` | 0 / 1 | SPHERE / ARROW | SimNode | `odom` | 青 |
+| `my_robot.gimbal` | 11 / 12 | SPHERE / ARROW | SimNode | `gimbal` | 橙（自车） |
+| `robot.center` | 0 | SPHERE | SimNode | `robot`（原点） | **全绿（真值）** |
+| `robot.armor` | i | CUBE | SimNode | `robot`（板位固定） | **全绿（真值）** |
+| `kalman.center` | 50 | SPHERE | TrackerNode | `gimbal` | **黄（Kalman 中心）** |
+| `kalman.vel` | 52 | ARROW | TrackerNode | `gimbal` | 黄（随中心） |
+| `kalman.armor` | 60+i / 70 | CUBE / LINE_LIST | TrackerNode | `gimbal` | **蓝（Kalman 装甲）** |
+| `aim.lead` | 80 / 82 | SPHERE / LINE_LIST | TrackerNode | `gimbal`（射线从原点） | 品红 |
 
 装甲几何常量：灯条 56 mm、小板宽 135 mm、厚 15 mm。姿态 `armor_quat(yaw)` 带 15° pitch。
 

@@ -97,7 +97,7 @@ void TrackerNode::publish_kalman_markers(
       m.action = omniscope::MarkerAction::ADD;
       m.pose.position = to_vec3(ekf_center);
       m.scale = {0.10f, 0.10f, 0.10f};
-      m.color = to_rgba(1.0f, 0.45f, 0.05f, 0.95f);
+      m.color = to_rgba(1.0f, 0.90f, 0.12f, 0.95f);
       markers.push_back(m);
     }
     if (ekf_vel.norm() > 0.05) {
@@ -110,7 +110,7 @@ void TrackerNode::publish_kalman_markers(
       Eigen::Vector3d v_end = ekf_center + ekf_vel * 0.35;
       m.points = {to_vec3(ekf_center), to_vec3(v_end)};
       m.scale = {0.035f, 0.07f, 0.07f};
-      m.color = to_rgba(1.0f, 0.25f, 0.05f, 1.0f);
+      m.color = to_rgba(1.0f, 0.90f, 0.12f, 1.0f);
       markers.push_back(m);
     }
 
@@ -132,7 +132,7 @@ void TrackerNode::publish_kalman_markers(
         static_cast<float>(kArmorThick),
         static_cast<float>(kArmorWidth),
         static_cast<float>(kLightbar)};
-      m.color = to_rgba(0.15f, 0.60f, 1.0f, 0.90f);
+      m.color = to_rgba(0.15f, 0.50f, 1.0f, 0.92f);
       markers.push_back(m);
 
       ekf_spokes.push_back(to_vec3(ekf_center));
@@ -147,7 +147,7 @@ void TrackerNode::publish_kalman_markers(
       m.action = omniscope::MarkerAction::ADD;
       m.points = ekf_spokes;
       m.scale = {0.005f, 0.0f, 0.0f};
-      m.color = to_rgba(0.25f, 0.55f, 0.9f, 0.65f);
+      m.color = to_rgba(0.15f, 0.50f, 1.0f, 0.65f);
       markers.push_back(m);
     }
   }
@@ -161,7 +161,7 @@ void TrackerNode::publish_kalman_markers(
     m.action = omniscope::MarkerAction::ADD;
     m.pose.position = to_vec3(aim_lead_pt);
     m.scale = {0.09f, 0.09f, 0.09f};
-    m.color = to_rgba(1.0f, 0.85f, 0.0f, 1.0f);
+    m.color = to_rgba(1.0f, 0.35f, 0.7f, 1.0f);
     markers.push_back(m);
   }
   {
@@ -173,7 +173,7 @@ void TrackerNode::publish_kalman_markers(
     m.action = omniscope::MarkerAction::ADD;
     m.points = {to_vec3(zero), to_vec3(aim_lead_pt)};
     m.scale = {0.008f, 0.0f, 0.0f};
-    m.color = to_rgba(1.0f, 0.8f, 0.1f, 0.75f);
+    m.color = to_rgba(1.0f, 0.35f, 0.7f, 0.75f);
     markers.push_back(m);
   }
 

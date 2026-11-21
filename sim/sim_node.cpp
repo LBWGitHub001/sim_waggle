@@ -130,7 +130,7 @@ void publish_gt_markers(const common::GroundTruth & gt)
     m.action = omniscope::MarkerAction::ADD;
     m.pose.position = {0.0f, 0.0f, 0.0f};
     m.scale = {0.11f, 0.11f, 0.11f};
-    m.color = to_rgba(1.0f, 0.85f, 0.1f, 1.0f);
+    m.color = to_rgba(1.0f, 0.45f, 0.08f, 1.0f);
     markers.push_back(m);
   }
   {
@@ -142,7 +142,7 @@ void publish_gt_markers(const common::GroundTruth & gt)
     m.action = omniscope::MarkerAction::ADD;
     m.points = {{0.0f, 0.0f, 0.0f}, {0.50f, 0.0f, 0.0f}};
     m.scale = {0.025f, 0.05f, 0.05f};
-    m.color = to_rgba(1.0f, 0.95f, 0.2f, 1.0f);
+    m.color = to_rgba(1.0f, 0.45f, 0.08f, 1.0f);
     markers.push_back(m);
   }
 
@@ -155,7 +155,7 @@ void publish_gt_markers(const common::GroundTruth & gt)
     m.action = omniscope::MarkerAction::ADD;
     m.pose.position = {0.0f, 0.0f, 0.0f};
     m.scale = {0.10f, 0.10f, 0.10f};
-    m.color = to_rgba(0.35f, 1.0f, 0.45f, 0.95f);
+    m.color = to_rgba(0.12f, 0.95f, 0.22f, 0.95f);
     markers.push_back(m);
   }
 
@@ -176,7 +176,7 @@ void publish_gt_markers(const common::GroundTruth & gt)
       static_cast<float>(kArmorThick),
       static_cast<float>(kArmorWidth),
       static_cast<float>(kLightbar)};
-    m.color = to_rgba(0.2f, 0.85f, 0.35f, 0.90f);
+    m.color = to_rgba(0.12f, 0.95f, 0.22f, 0.92f);
     markers.push_back(m);
   }
 
