@@ -109,7 +109,7 @@ armor_i    = center + Rz(robot.yaw) * p_i_robot
 observe(const GroundTruth&) -> ArmorObservation
 ```
 
-噪声：平面高斯，z 不加噪；yaw 加 `noise_yaw_std`。种子 42。
+噪声：平面高斯，z 不加噪；yaw 加 `noise_yaw_std`。种子 42。加速度 IMU 噪声在 `SimNode`（种子 43，与相机独立）：`u = (-a_x,-a_y,0) + N(0, noise_acc_std²)`（`enable_noise` 时）。
 
 ### `SimNode`（`sim_node.hpp`）
 
@@ -123,7 +123,7 @@ SimNode(SimulationConfig, Topics)
 start() / stop() / join() / finished() / frames_published()
 ```
 
-循环：先 `publish(0, 0)` → `step(dt)` → `publish(frame*dt, frame)`。`duration>0` 到点退出并 `obs_out.close()`。`publish` 同时发 gimbal 系 `obs_*`/`true_*`、`plot_tfs`、`my_robot.*`/`robot.armor` Marker。
+循环：先 `publish(0, 0)` → `step(dt)` → `publish(frame*dt, frame)`。`duration>0` 到点退出并 `obs_out.close()`。`publish` 同时发 gimbal 系 `obs_*`/`true_*`、带噪 `ego_acc_*`、`plot_tfs`、`my_robot.*`/`robot.armor` Marker。
 
 ## 3. `tracker/` — 滤波
 
@@ -145,32 +145,33 @@ BaselineTracker(target_radius=0.20, armor_num=4, EkfParams, p0=Zero(11))
 
 ```
 EgoControlTracker(target_radius=0.20, armor_num=4, EkfParams, p0=Zero(11))
-set_control(ego_acc)   // gimbal xy，z 忽略
-predict(dt)            // 内部 Target::predict(dt, u_)
+predict(dt)                 // Target::predict：只 Fx
+control(ego_acc)            // Target::control：Bu + B M Bᵀ，gimbal xy，z 忽略
 ```
 
-`u = (û_x, û_y)`，`û = (-a_x, -a_y)`。过程模型 `x = Fx + Bu`，`B` 为 11×2（`½dt²/dt` 进 xc/vx 与 yc/vy）。协方差 `P = FPFᵀ + B Qu Bᵀ + Q_{z,ψ}`，`Qu = q_u_acc_var I₂`。xy 不再用原来的 `q_xyz_acc_var`（那是未知加速度；现在未知量在 `u` 上）。
+过程 `x = Fx + B(u+m) + w`。`u` 是 SimNode 发出的带噪加速度（真值 `(-a_x,-a_y)` 加 `N(0,σ²)`）。`B` 为 11×2（`½dt²/dt` 进 xc/vx 与 yc/vy）。`M = q_u_acc_var I₂`。xy 不再用 `q_xyz_acc_var`。推导见仓库 README 第 3 节。
 
 ### `auto_aim::Target` / `EkfParams`
 
 ```
 EkfParams { q_xyz_acc_var=100, q_yaw_acc_var=75, q_u_acc_var=1, r_yaw=0.04, r_pitch=0.04, r_dist_base=0.015 }
 Target(armor, t, radius, armor_num, P0_dig, ekf_params)
-predict(dt) / predict(dt, acc) / update(armor)
+predict(dt) / control(acc) / update(armor)
 ekf_x() / ekf() / armor_xyza_list() / diverged()
 ```
 
-观测更新 `update_ypda`：z = `[ypd_yaw, ypd_pitch, ypd_dist, ypr_yaw]`。奇偶板用 `r+l` 与 `zc+h`。
+`predict` 只建 F；`control` 用 `last_dt_` 建 B；`update_ypda` 组 `Q_{z,ψ}`（首帧 `last_dt_=0` 则 Q=0）再 `ekf_.update(..., Q)`。z = `[ypd_yaw, ypd_pitch, ypd_dist, ypr_yaw]`。奇偶板用 `r+l` 与 `zc+h`。
 
 ### `tools::ExtendedKalmanFilter`
 
 ```
 x, P, last_nis, data["nis"|"nees"|...]
-predict(F, Q) / predict(F, Q, f)
-update(z, H, R, z_subtract) / update(z, H, R, h, z_subtract)
+predict(F) / predict(F, f)          // x=Fx, P=FPFᵀ；Q 不进 predict
+control(B, u, M)                    // x+=Bu, P+=B M Bᵀ
+update(z, H, R, Q, ...)             // P+=Q，再约瑟夫量测更新
 ```
 
-约瑟夫形式 `P = (I-KH)P(I-KH)' + KRK'`。`x_add` 默认 `a+b`，Target 对 yaw(`x[6]`) 做 `limit_rad`。
+先验协方差等价 `P⁻ = FPFᵀ + BMBᵀ + Q`。约瑟夫形式 `P = (I-KH)P(I-KH)' + KRK'`。`x_add` 默认 `a+b`，Target 对 yaw(`x[6]`) 做 `limit_rad`。
 
 ### `auto_aim::Armor`（`armor.hpp`）
 
@@ -188,7 +189,7 @@ TrackerNode(unique_ptr<EgoControlTracker>, Channel<StampedObservation>&,
 start() / stop() / join() / finished()
 ```
 
-每帧先 `set_control(msg.ego_acc)`，再 `predict`/`update`；`estimate()` 后 `express_target_in_gimbal` + `SimulationMetrics::update`，写 `TrackerOutput.metrics`，发 `kal_*`/`err_*` 与 Kalman Marker。
+每帧：首帧只 `update`；之后 `predict(dt)` → `control(msg.ego_acc)` → `update(obs)`。`estimate()` 后 `express_target_in_gimbal` + `SimulationMetrics::update`，写 `TrackerOutput.metrics`，发 `kal_*`/`err_*` 与 Kalman Marker。
 
 ## 4. `app/` 接线
 
@@ -229,8 +230,9 @@ Host：`thirdparty/OmniScope/host/start.sh`，门户 `http://127.0.0.1:8080`。
 | `measurement.enable_noise` | | true |
 | `measurement.noise_pos_std` | m | 0.005 |
 | `measurement.noise_yaw_std` | rad | 0.01 |
+| `measurement.noise_acc_std` | 仿真 IMU xy 噪声 σ (m/s²) | 1.0 |
 | `ekf.q_xyz_acc_var / q_yaw_acc_var` | z / yaw 未建模加速度 | 100 / 75 |
-| `ekf.q_u_acc_var` | 控制量 ax,ay 噪声，经 B 进 Q | 1.0 |
+| `ekf.q_u_acc_var` | 滤波 M=σ² I₂，经 B 进 P | 1.0 |
 | `ekf.r_yaw / r_pitch / r_dist_base` | | 0.04 / 0.04 / 0.015 |
 | `ekf.p0` | 11 维对角 | `1,64,1,64,1,64,0.4,400,1e-5,1,1` |
 | `remote_logger.*` | `omniscope::RemoteLogger::Config` | 见 yaml |

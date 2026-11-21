@@ -57,7 +57,7 @@ git checkout -b exp/<short-name>
 
 1. 在 `StampedObservation` 末尾加字段（带默认值，旧代码仍编译）
 2. `SimNode::publish` 从 `gt.gimbal` / `gt.chassis` 填写
-3. 在本分支的 `TrackerNode::run` 里把新字段交给具体 tracker（例如 `set_control(msg.ego_acc)`），不要为此引入虚基类
+3. 在本分支的 `TrackerNode::run` 里把新字段交给具体 tracker（例如 `control(msg.ego_acc)`），不要为此引入虚基类
 
 不要为了传 ω 去 include `sim/kinematics.hpp`。
 

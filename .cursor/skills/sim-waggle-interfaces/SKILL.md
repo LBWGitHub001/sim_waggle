@@ -83,15 +83,14 @@ EKF 吃 `xyz_in_gimbal`（`armor_odom - gimbal.pos`，不乘 look-at）。`xyz_i
 ```
 init(obs, t)
 predict(dt)
+control(ego_acc)       // 本分支：gimbal xy 控制注入；其它分支可没有
 update(obs)            // 未 init 时内部应自动 init
 estimate() -> TargetEstimate
 predict_aim_point(flight_time)
 diverged() / last_nis() / name()
 ```
 
-本分支 `TrackerNode` 在每帧 `predict`/`update` 前调用 `set_control(msg.ego_acc)`（gimbal xy 加速度）。
-
-`TrackerNode` 调用序（不要改语义）：首帧只 `update`；之后 `predict(sim_t - last_t)` + `update`；每帧 `estimate()`，用 `gt_in` 做误差，写入 `LatestSlot<TrackerOutput>`（含 `metrics`）。不丢帧。
+本分支 `TrackerNode` 调用序：首帧只 `update`；之后 `predict(dt)` → `control(msg.ego_acc)` → `update(obs)`。`ego_acc` 是带噪的 gimbal xy 加速度。每帧 `estimate()`，用 `gt_in` 做误差，写入 `LatestSlot<TrackerOutput>`（含 `metrics`）。不丢帧。
 
 接线模板（`app/main.cpp`）：
 
@@ -113,7 +112,7 @@ tracker::TrackerNode tracker_node(
 | `TrackerNode` | 注入 `unique_ptr<本分支具体 Tracker>`；消费 FIFO；读 `gt_in` 做误差；写 `est_out`（含 `metrics`）；发 `kal_*`/`err_*`/Kalman Marker |
 | 收尾 | `sim.stop(); sim.join(); tracker.join();`（sim 关通道） |
 
-仿真时钟 `sim_t = frame * dt`，与墙钟无关。传感器 RNG 种子 42，可复现。
+仿真时钟 `sim_t = frame * dt`，与墙钟无关。相机观测 RNG 种子 42；加速度 IMU 噪声种子 43。可复现。
 
 ## YAML（`configs/sim_waggle.yaml`）
 
