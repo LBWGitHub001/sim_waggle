@@ -266,7 +266,8 @@ void SimNode::publish(double sim_t, uint64_t frame)
   msg.sim_t = sim_t;
   msg.frame = frame;
   const Eigen::Vector3d a = kinematics_.origin_acc();
-  Eigen::Vector3d u(-a.x(), -a.y(), 0.0);
+  const Eigen::Vector3d u_true(-a.x(), -a.y(), 0.0);
+  Eigen::Vector3d u = u_true;
   if (cfg_.enable_noise) {
     u.x() += dist_acc_(acc_rng_);
     u.y() += dist_acc_(acc_rng_);
@@ -309,6 +310,12 @@ void SimNode::publish(double sim_t, uint64_t frame)
     {"true_w_ego", gt.chassis.w},
     {"ego_acc_x", msg.ego_acc.x()},
     {"ego_acc_y", msg.ego_acc.y()},
+  });
+  omniscope::plot({
+    {"u_true_x", u_true.x()},
+    {"u_true_y", u_true.y()},
+    {"u_x", u.x()},
+    {"u_y", u.y()},
   });
 
   publish_tfs(gt);

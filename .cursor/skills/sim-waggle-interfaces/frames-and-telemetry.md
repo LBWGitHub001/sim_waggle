@@ -55,7 +55,9 @@ true_vel_x/y/z           m/s   gimbal
 true_yaw_deg             deg
 true_w                   rad/s
 true_w_ego               rad/s
-ego_acc_x/y              m/s^2  gimbal xy 带噪控制量 u+m（z 不用）
+ego_acc_x/y              m/s^2  gimbal xy 带噪控制量（= u，z 不用）
+u_true_x/y               m/s^2  无噪声 û = (-a_g,x, -a_g,y)
+u_x/y                    m/s^2  tracker 实际控制量 u = û + m
 ```
 
 TrackerNode（`x.size()>=11` 才发）：

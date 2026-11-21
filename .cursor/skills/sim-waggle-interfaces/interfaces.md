@@ -123,7 +123,7 @@ SimNode(SimulationConfig, Topics)
 start() / stop() / join() / finished() / frames_published()
 ```
 
-循环：先 `publish(0, 0)` → `step(dt)` → `publish(frame*dt, frame)`。`duration>0` 到点退出并 `obs_out.close()`。`publish` 同时发 gimbal 系 `obs_*`/`true_*`、带噪 `ego_acc_*`、`plot_tfs`、`my_robot.*`/`robot.armor` Marker。
+循环：先 `publish(0, 0)` → `step(dt)` → `publish(frame*dt, frame)`。`duration>0` 到点退出并 `obs_out.close()`。`publish` 同时发 gimbal 系 `obs_*`/`true_*`、`u_true_*`/`u_*`（及同值 `ego_acc_*`）、`plot_tfs`、`my_robot.*`/`robot.armor` Marker。
 
 ## 3. `tracker/` — 滤波
 

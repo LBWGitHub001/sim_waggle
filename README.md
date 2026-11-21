@@ -142,7 +142,7 @@ P = (I-KH)P(I-KH)^\top + KRK^\top
 1. **仿真**给 `ego_acc` 加 $m$（`enable_noise` 打开时 xy 各加 $\mathcal{N}(0,\sigma_u^2)$，RNG 种子 43，与相机观测种子 42 独立，避免人为相关）。
 2. **滤波** `control` 步必须加 $BMB^\top$，让 $P$ 承认 IMU 不准。
 
-`ego_acc_x/y` 画的是带噪值，也就是 tracker 真实输入。
+曲线：`u_true_x/y` 是无噪声 \(\hat{\mathbf{u}}\)；`u_x/y`（与 `ego_acc_x/y` 同值）是 tracker 实际吃到的 \(\mathbf{u}=\hat{\mathbf{u}}+\mathbf{m}\)。
 
 ### 3.5 三步 API（对应代码）
 
@@ -206,7 +206,7 @@ P = (I-KH)P(I-KH)^\top + KRK^\top
 
 ### 3.8 怎样判断实验成立
 
-- `ego_acc_x/y` 应在真值 $-a_g$ 附近抖动，不是光滑曲线。
+- `u_x/y` 应在 `u_true_x/y` 附近抖动，不是光滑曲线。
 - `err_x/y`、`err_vx/vy` 相对 `main` 基线应明显下降，但**不应再贴成数值零**（有 $m$ 和 $M$）。
 - Host 3D 切到 `odom`：场地上敌车几乎静止；切到 `gimbal`：杆臂视在运动应由控制量吃掉，而不是整段被 $Q$ 当未知扰动。
 
@@ -219,6 +219,6 @@ P = (I-KH)P(I-KH)^\top + KRK^\top
 1. **右上 3D**：Host 把所有 Marker 变到当前查看系（RViz 风格，不是按 `frame_id` 过滤）。真值全绿（`robot`）；Kalman 装甲蓝、中心黄（`frame_id=gimbal`）。切 `odom` 看场地，切 `camera` 看光轴锁定。
 2. **左下相机**：`camera_detector` HUD，在 look-at 的 `camera` 系。
 3. **左上波形**：工作系 = 不转的 `gimbal`。
-   - SimNode：`obs_armor_*`、`true_center_*` / `true_vel_*` / `true_armor_*`、`ego_acc_x/y`（带噪控制量）
+   - SimNode：`obs_armor_*`、`true_center_*` / `true_vel_*` / `true_armor_*`、`u_true_x/y`、`u_x/y`（及同值的 `ego_acc_x/y`）
    - TrackerNode：`kal_*` 以及误差 `err_*`（Kalman − gimbal 真值；**不在 main 里 plot**）
 4. **右下日志**。
