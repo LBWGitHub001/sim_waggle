@@ -6,13 +6,17 @@ simulation:
 
 my_robot:
   chassis_w: 12.0                  # 底盘小陀螺角速度 (rad/s)
-  chassis_vx: 0.0                 # 底盘平移线速度 X (m/s)
-  chassis_vy: 0.0                 # 底盘平移线速度 Y (m/s)
+  chassis_vx: 0.0                 # 底盘平移线速度 X (m/s)；碰到 x_range 反向
+  chassis_vy: 0.0                 # 底盘平移线速度 Y (m/s)；碰到 y_range 反向
   gimbal_offset: [0.05, 0.0, 0.0] # 云台旋转中心相对底盘旋转中心的偏置 [dx, dy, dz] (m)
+  x_range: [-1.5, 1.5]            # 底盘平动区间 [xmin, xmax] (m)
+  y_range: [-1.5, 1.5]            # 底盘平动区间 [ymin, ymax] (m)
 
 target_robot:
   init_pos: [3.5, 0.0, 0.0]       # 目标初始空间坐标 [x, y, z] (m)
-  vel: [0.0, 0.0, 0.0]            # 目标真实平移速度 [vx, vy, vz] (m/s)
+  vel: [0.0, 0.0, 0.0]            # 目标平移速度 [vx, vy, vz] (m/s)；碰到区间反向
+  x_range: [2.0, 5.0]             # 目标平动区间 [xmin, xmax] (m)
+  y_range: [-1.5, 1.5]            # 目标平动区间 [ymin, ymax] (m)
   radius: 0.20                    # 装甲板旋转半径 (m)
   w: 7.0                          # 目标自转角速度 (rad/s)
   armor_num: 4                    # 装甲板数量
@@ -21,13 +25,13 @@ measurement:
   enable_noise: true
   noise_pos_std: 0.005            # 观测位置噪声标准差 (m)
   noise_yaw_std: 0.01             # 观测装甲板角噪声标准差 (rad)
-  noise_acc_std: 1.0              # 仿真 IMU xy 高斯噪声标准差 σ_u (m/s^2)；u = û + N(0, σ_u²)
+  noise_acc_std: 0.1              # 仿真 IMU xy 高斯噪声标准差 σ_u (m/s^2)；u = û + N(0, σ_u²)
 
 ekf:
-  q_xyz_acc_var: 100.0            # 未建模 z 加速度方差
-  q_yaw_acc_var: 75.0             # 角加速度方差
-  m_ax: 1.0                       # M 对角 ax 方差 (m/s^2)^2，应对齐 (noise_acc_std)²
-  m_ay: 1.0                       # M 对角 ay 方差 (m/s^2)^2
+  q_xyz_acc_var: 10.0            # 未建模 z 加速度方差
+  q_yaw_acc_var: 7.50             # 角加速度方差
+  m_ax: 100.0                       # M 对角 ax 方差 (m/s^2)^2，应对齐 (noise_acc_std)²
+  m_ay: 100.0                       # M 对角 ay 方差 (m/s^2)^2
   r_yaw: 0.04                     # yaw 观测噪声
   r_pitch: 0.04                   # pitch 观测噪声
   r_dist_base: 0.015              # 距离观测噪声基础值

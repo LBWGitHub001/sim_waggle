@@ -34,6 +34,24 @@ struct AppConfig
   Eigen::VectorXd p0;
 };
 
+void load_xy_range(const YAML::Node & node, double & xmin, double & xmax, double & ymin, double & ymax)
+{
+  if (node["x_range"]) {
+    const auto xr = node["x_range"].as<std::vector<double>>();
+    if (xr.size() >= 2) {
+      xmin = xr[0];
+      xmax = xr[1];
+    }
+  }
+  if (node["y_range"]) {
+    const auto yr = node["y_range"].as<std::vector<double>>();
+    if (yr.size() >= 2) {
+      ymin = yr[0];
+      ymax = yr[1];
+    }
+  }
+}
+
 AppConfig load_config(const std::string & path)
 {
   const YAML::Node yaml = YAML::LoadFile(path);
@@ -53,6 +71,9 @@ AppConfig load_config(const std::string & path)
     cfg.sim.chassis_vy = mr["chassis_vy"].as<double>(0.0);
     auto off = mr["gimbal_offset"].as<std::vector<double>>();
     cfg.sim.gimbal_offset = Eigen::Vector3d(off[0], off[1], off[2]);
+    load_xy_range(
+      mr, cfg.sim.chassis_x_min, cfg.sim.chassis_x_max, cfg.sim.chassis_y_min,
+      cfg.sim.chassis_y_max);
   }
   if (yaml["target_robot"]) {
     auto tr = yaml["target_robot"];
@@ -63,6 +84,8 @@ AppConfig load_config(const std::string & path)
     cfg.sim.target_radius = tr["radius"].as<double>(0.20);
     cfg.sim.target_w = tr["w"].as<double>(4.0);
     cfg.sim.armor_num = tr["armor_num"].as<int>(4);
+    load_xy_range(
+      tr, cfg.sim.target_x_min, cfg.sim.target_x_max, cfg.sim.target_y_min, cfg.sim.target_y_max);
   }
   if (yaml["measurement"]) {
     auto ms = yaml["measurement"];

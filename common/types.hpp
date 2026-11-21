@@ -157,18 +157,26 @@ struct TrackerOutput
 // 8. 仿真系统参数配置
 struct SimulationConfig
 {
-  // 自车与偏置云台
+  // 自车与偏置云台。平动在 x_range / y_range 内折返，不会沿 vx,vy 积到无穷。
   double chassis_w = 10.0;
   double chassis_vx = 0.0;
   double chassis_vy = 0.0;
   Eigen::Vector3d gimbal_offset{0.12, 0.0, 0.0};
+  double chassis_x_min = -1.5;
+  double chassis_x_max = 1.5;
+  double chassis_y_min = -1.5;
+  double chassis_y_max = 1.5;
 
-  // 敌车目标
+  // 敌车目标。vel 同样在区间内折返。
   Eigen::Vector3d target_init_pos{3.5, 0.0, 0.0};
   Eigen::Vector3d target_vel{0.0, 0.0, 0.0};
   double target_radius = 0.20;
   double target_w = 4.0;
   int armor_num = 4;
+  double target_x_min = 2.0;
+  double target_x_max = 5.0;
+  double target_y_min = -1.5;
+  double target_y_max = 1.5;
 
   // 测量噪声
   bool enable_noise = true;

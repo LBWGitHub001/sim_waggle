@@ -1,5 +1,6 @@
 #include "kinematics.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include "frames.hpp"
@@ -39,9 +40,15 @@ void KinematicsEngine::reset()
   gt_.t = 0.0;
 
   gt_.chassis.vel = Eigen::Vector3d(cfg_.chassis_vx, cfg_.chassis_vy, 0.0);
+  bounce_xy(
+    gt_.chassis.pos, gt_.chassis.vel, cfg_.chassis_x_min, cfg_.chassis_x_max, cfg_.chassis_y_min,
+    cfg_.chassis_y_max);
 
   gt_.target.center = cfg_.target_init_pos;
   gt_.target.vel = cfg_.target_vel;
+  bounce_xy(
+    gt_.target.center, gt_.target.vel, cfg_.target_x_min, cfg_.target_x_max, cfg_.target_y_min,
+    cfg_.target_y_max);
   gt_.target.radius = cfg_.target_radius;
   gt_.target.armor_num = cfg_.armor_num;
   gt_.target.armors_pos.resize(cfg_.armor_num);
@@ -63,18 +70,44 @@ void KinematicsEngine::step(double dt)
   update_derived();
 }
 
+void KinematicsEngine::bounce_xy(
+  Eigen::Vector3d & pos, Eigen::Vector3d & vel, double xmin, double xmax, double ymin, double ymax)
+{
+  if (xmax < xmin) std::swap(xmax, xmin);
+  if (ymax < ymin) std::swap(ymax, ymin);
+  if (pos.x() > xmax) {
+    pos.x() = xmax;
+    if (vel.x() > 0.0) vel.x() = -vel.x();
+  } else if (pos.x() < xmin) {
+    pos.x() = xmin;
+    if (vel.x() < 0.0) vel.x() = -vel.x();
+  }
+  if (pos.y() > ymax) {
+    pos.y() = ymax;
+    if (vel.y() > 0.0) vel.y() = -vel.y();
+  } else if (pos.y() < ymin) {
+    pos.y() = ymin;
+    if (vel.y() < 0.0) vel.y() = -vel.y();
+  }
+}
+
 void KinematicsEngine::integrate_chassis(double dt)
 {
   gt_.chassis.w = cfg_.chassis_w;
   gt_.chassis.pos += gt_.chassis.vel * dt;
+  bounce_xy(
+    gt_.chassis.pos, gt_.chassis.vel, cfg_.chassis_x_min, cfg_.chassis_x_max, cfg_.chassis_y_min,
+    cfg_.chassis_y_max);
   gt_.chassis.yaw = limit_rad(gt_.chassis.yaw + gt_.chassis.w * dt);
 }
 
 void KinematicsEngine::integrate_target(double dt)
 {
   gt_.target.w = cfg_.target_w;
-  gt_.target.vel = cfg_.target_vel;
   gt_.target.center += gt_.target.vel * dt;
+  bounce_xy(
+    gt_.target.center, gt_.target.vel, cfg_.target_x_min, cfg_.target_x_max, cfg_.target_y_min,
+    cfg_.target_y_max);
   gt_.target.yaw = limit_rad(gt_.target.yaw + gt_.target.w * dt);
 }
 

@@ -87,7 +87,7 @@ ground_truth() const -> const GroundTruth&
 set_chassis_w / set_gimbal_offset / set_target_vel
 ```
 
-积分在 odom（底盘初值在原点）。`ground_truth()` 即 odom。`origin_acc()` 为云台原点惯性加速度。
+积分在 odom（底盘初值在原点）。`ground_truth()` 即 odom。`origin_acc()` 为云台原点惯性加速度。底盘 / 敌车 xy 平动碰到各自 `x_range`/`y_range` 时该轴速度反向，不沿匀速积到无穷。
 
 内部派生量：
 
@@ -225,7 +225,9 @@ Host：`thirdparty/OmniScope/host/start.sh`，门户 `http://127.0.0.1:8080`。
 | `simulation.duration` | `sim.duration` | 0=无限 |
 | `my_robot.chassis_w/vx/vy` | 同名 | 10, 0, 0 |
 | `my_robot.gimbal_offset` | `[dx,dy,dz]` m | (0.12,0,0)（文件里常为 0.05） |
+| `my_robot.x_range` / `y_range` | 底盘平动折返区间 | `[-1.5,1.5]` |
 | `target_robot.init_pos/vel` | `target_init_pos/target_vel` | (3.5,0,0) / 0 |
+| `target_robot.x_range` / `y_range` | 目标平动折返区间 | `[2,5]` / `[-1.5,1.5]` |
 | `target_robot.radius/w/armor_num` | 同名 | 0.20 / 4 / 4 |
 | `measurement.enable_noise` | | true |
 | `measurement.noise_pos_std` | m | 0.005 |

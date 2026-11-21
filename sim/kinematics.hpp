@@ -31,11 +31,18 @@ public:
 
   void set_chassis_w(double w) { cfg_.chassis_w = w; }
   void set_gimbal_offset(const Eigen::Vector3d & offset) { cfg_.gimbal_offset = offset; }
-  void set_target_vel(const Eigen::Vector3d & vel) { cfg_.target_vel = vel; }
+  void set_target_vel(const Eigen::Vector3d & vel)
+  {
+    cfg_.target_vel = vel;
+    gt_.target.vel = vel;
+  }
 
 private:
   void integrate_chassis(double dt);
   void integrate_target(double dt);
+  static void bounce_xy(
+    Eigen::Vector3d & pos, Eigen::Vector3d & vel, double xmin, double xmax, double ymin,
+    double ymax);
   void update_derived();
   void update_gimbal();
   void update_armors();
