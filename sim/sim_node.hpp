@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <random>
 #include <thread>
 
 #include "types.hpp"
@@ -50,6 +51,8 @@ private:
   Topics topics_;
   KinematicsEngine kinematics_;
   CameraSensor sensor_;
+  std::default_random_engine acc_rng_{43};  // 与相机观测种子 42 分开，避免相关
+  std::normal_distribution<double> dist_acc_;
 
   std::thread thread_;
   std::atomic<bool> stop_requested_{false};

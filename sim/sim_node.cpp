@@ -211,7 +211,11 @@ void publish_gt_markers(const common::GroundTruth & gt)
 }  // namespace
 
 SimNode::SimNode(const common::SimulationConfig & cfg, Topics topics)
-: cfg_(cfg), topics_(topics), kinematics_(cfg), sensor_(cfg)
+: cfg_(cfg),
+  topics_(topics),
+  kinematics_(cfg),
+  sensor_(cfg),
+  dist_acc_(0.0, cfg.noise_acc_std)
 {
 }
 
@@ -262,7 +266,12 @@ void SimNode::publish(double sim_t, uint64_t frame)
   msg.sim_t = sim_t;
   msg.frame = frame;
   const Eigen::Vector3d a = kinematics_.origin_acc();
-  msg.ego_acc = Eigen::Vector3d(-a.x(), -a.y(), 0.0);
+  Eigen::Vector3d u(-a.x(), -a.y(), 0.0);
+  if (cfg_.enable_noise) {
+    u.x() += dist_acc_(acc_rng_);
+    u.y() += dist_acc_(acc_rng_);
+  }
+  msg.ego_acc = u;
   topics_.obs_latest.set(msg);
   topics_.obs_out.push(msg);
 

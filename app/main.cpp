@@ -69,6 +69,7 @@ AppConfig load_config(const std::string & path)
     cfg.sim.enable_noise = ms["enable_noise"].as<bool>(true);
     cfg.sim.noise_pos_std = ms["noise_pos_std"].as<double>(0.005);
     cfg.sim.noise_yaw_std = ms["noise_yaw_std"].as<double>(0.01);
+    cfg.sim.noise_acc_std = ms["noise_acc_std"].as<double>(1.0);
   }
   if (yaml["ekf"]) {
     auto ekf_n = yaml["ekf"];

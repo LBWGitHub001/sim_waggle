@@ -174,6 +174,7 @@ struct SimulationConfig
   bool enable_noise = true;
   double noise_pos_std = 0.005;
   double noise_yaw_std = 0.01;
+  double noise_acc_std = 1.0;  // 自车 xy 加速度 IMU 噪声标准差 (m/s^2)，与 ekf.q_u_acc_var 对齐
 
   // 仿真运行
   int fps = 50;
