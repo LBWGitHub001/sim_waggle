@@ -91,11 +91,15 @@ void KinematicsEngine::update_gimbal()
   const Eigen::Vector3d r_odom = rot_z(gt_.chassis.yaw) * cfg_.gimbal_offset;
   gt_.gimbal.pos = gt_.chassis.pos + r_odom;
   gt_.gimbal.vel = gt_.chassis.vel + Eigen::Vector3d(0.0, 0.0, gt_.chassis.w).cross(r_odom);
+  gt_.gimbal.yaw = 0.0;
+  gt_.gimbal.pitch = 0.0;
+  gt_.gimbal.R_gimbal2world = Eigen::Matrix3d::Identity();
 
   const Eigen::Vector3d to_target = gt_.target.center - gt_.gimbal.pos;
-  gt_.gimbal.yaw = std::atan2(to_target.y(), to_target.x());
-  gt_.gimbal.pitch = 0.0;
-  gt_.gimbal.R_gimbal2world = rot_z(gt_.gimbal.yaw);
+  gt_.camera.pos = gt_.gimbal.pos;
+  gt_.camera.yaw = std::atan2(to_target.y(), to_target.x());
+  gt_.camera.pitch = 0.0;
+  gt_.camera.R_camera2odom = rot_z(gt_.camera.yaw);
 }
 
 void KinematicsEngine::update_armors()

@@ -37,10 +37,8 @@ common::ArmorObservation CameraSensor::observe(const common::GroundTruth & gt)
   const auto & armor_pos = gt.target.armors_pos[gt.visible_armor_id];
   const double armor_yaw_odom = gt.target.armors_yaw[gt.visible_armor_id];
 
-  const Eigen::Vector3d r_g2a = armor_pos - gt.gimbal.pos;
-
-  // 工作系：旋转相机系。噪声加在 gimbal，ypd / yaw 也在 gimbal。
-  obs.xyz_in_gimbal = gt.gimbal.R_gimbal2world.transpose() * r_g2a;
+  // 工作系 = 方向不变的 gimbal：只减平移，不加 look-at 旋转。
+  obs.xyz_in_gimbal = armor_pos - gt.gimbal.pos;
   obs.xyz_in_world = armor_pos;  // odom 中间件，滤波不用
   obs.yaw_raw = common::yaw_odom_to_gimbal(armor_yaw_odom, gt.gimbal);
 

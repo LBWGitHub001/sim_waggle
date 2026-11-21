@@ -95,7 +95,7 @@ tracker::TrackerNode tracker_node(
 - 能编过：`cmake --build cmake-build-debug`
 - 默认 yaml 跑几秒不发散；终端 `kal-true` 误差与 HUD / `err_*` 曲线同口径
 - OmniScope 上 `obs_*` / `true_*` / `kal_*` 仍在；新键可另开
-- 3D：Kalman 橙、AIM 金（`frame_id=gimbal`）；robot 装甲在 `robot` 系；不要在 main 里 plot
+- 3D：Kalman 黄心蓝甲（`frame_id=gimbal`）；真值全绿在 `robot`；camera 光轴在 `camera`；不要在 main 里 plot
 - 相对 main 的 diff 应集中在 tracker 新文件 + 少量接线；若动了 `common/types.hpp`，字段必须有默认值
 
 ## 和无界面 benchmark

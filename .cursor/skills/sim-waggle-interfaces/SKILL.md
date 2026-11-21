@@ -50,19 +50,20 @@ sim/  ──Channel<StampedObservation>──►  tracker/
 
 ## 坐标系（必守）
 
-三系：
+四系：
 
 | 名字 | 角色 |
 |---|---|
 | **odom** | 场地惯性系。运动学积分、TF 中间件。日常滤波 / plot / 误差 **禁止**直接用 odom 坐标 |
-| **gimbal** | 云台/相机系（原点=云台，轴向随 yaw）。观测、EKF、`obs_*`/`true_*`/`kal_*`/`err_*`、Kalman Marker |
+| **gimbal** | 原点=云台中心，**轴向与 odom 平行、不转**。观测、EKF、`obs_*`/`true_*`/`kal_*`/`err_*`、Kalman Marker |
+| **camera** | 与 gimbal 同原点，轴向随 look-at yaw。只给 HUD / 光轴 TF |
 | **robot** | 敌车体。装甲板绑在此系；robot 在 odom 中转动 |
 
-`GroundTruth` 的 chassis/gimbal/target 是 odom。日常使用 `common::express_target_in_gimbal(gt)`（[`frames.hpp`](../../../common/frames.hpp)）。
+`GroundTruth` 的 chassis / gimbal.pos / camera / target 是 odom。日常使用 `common::express_target_in_gimbal(gt)`（[`frames.hpp`](../../../common/frames.hpp)）。HUD 用 `express_target_in_camera`。
 
-EKF 吃 `xyz_in_gimbal`。`xyz_in_world` 是装甲 odom 坐标，滤波和 plot 不用。
+EKF 吃 `xyz_in_gimbal`（`armor_odom - gimbal.pos`，不乘 look-at）。`xyz_in_world` 是装甲 odom 坐标，滤波和 plot 不用。
 
-误差在 **TrackerNode**：Kalman − gimbal 系敌车真值。Kalman 会跟上云台里的表观运动；要看场地里敌车几乎静止，把 Host 3D 查看系切到 `odom`。
+误差在 **TrackerNode**：Kalman − gimbal 系敌车真值。杆臂公转会出现在 `true_center_y`；要看场地里敌车几乎静止，把 Host 3D 查看系切到 `odom`。切 `camera` 看光轴锁定。
 
 `omniscope::plot` 禁止写在 `app/main.cpp`。
 
@@ -129,7 +130,7 @@ main 上的实现是 `tracker::BaselineTracker`，忠实还原 auto_aim，**不�
 ## 硬约束
 
 - 每完成一步就 `git commit` 并立刻 `git push`（见上文「Git：每一步都提交并推送」）
-- 工作系 = gimbal；odom 只作运动学/TF 中间件；不要把 odom 坐标喂给 EKF 或 `plot`
+- 工作系 = 方向不变的 gimbal；camera 只做 HUD/TF；odom 只作运动学/TF 中间件；不要把 odom 坐标喂给 EKF 或 `plot`
 - `omniscope::plot` / `plot_markers` / `plot_tfs` 只写在 SimNode / TrackerNode；误差分析在 TrackerNode
 - 不让 `sim/` 看见 `tracker/`，反之亦然
 - 不改 OmniScope 源码（除非任务明确要求改 Host / 加性协议）

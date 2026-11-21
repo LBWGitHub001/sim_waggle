@@ -193,8 +193,8 @@ cv::Mat CameraDetectorRenderer::render(
 {
   cv::Mat canvas(h_, w_, CV_8UC3, cv::Scalar(18, 20, 26));
 
-  // 工作系 = gimbal：相机在原点、朝向 +X；敌车用 odom→gimbal 后的真值。
-  const common::TargetState enemy = common::express_target_in_gimbal(gt);
+  // HUD 在 camera：原点=云台，朝向 look-at +X。Kalman 在 gimbal，画之前旋到 camera。
+  const common::TargetState enemy = common::express_target_in_camera(gt);
   Eigen::Vector3d cam_pos(0.0, 0.0, cam_height_);
   double gimbal_yaw = 0.0;
   double gimbal_pitch = 0.0;
@@ -325,12 +325,16 @@ cv::Mat CameraDetectorRenderer::render(
     }
   }
 
-  // 5. 自瞄跟踪器 EKF 重投影
+  // 5. 自瞄跟踪器 EKF 重投影（EKF 在 gimbal，旋到 camera）
   if (est.x.size() >= 11) {
-    Eigen::Vector3d ekf_center_3d(est.center.x(), est.center.y(), cam_height_);
+    const Eigen::Vector3d ekf_center_c = common::point_gimbal_to_camera(
+      Eigen::Vector3d(est.center.x(), est.center.y(), 0.0), gt.camera);
+    const double yaw_c = common::wrap_pi(est.yaw - gt.camera.yaw);
+    const Eigen::Vector3d ekf_vel_c = common::point_gimbal_to_camera(est.velocity, gt.camera);
+    Eigen::Vector3d ekf_center_3d(ekf_center_c.x(), ekf_center_c.y(), cam_height_);
     Eigen::Vector3d ekf_armor_3d = ekf_center_3d + Eigen::Vector3d(
-      -est.radius * std::cos(est.yaw),
-      -est.radius * std::sin(est.yaw),
+      -est.radius * std::cos(yaw_c),
+      -est.radius * std::sin(yaw_c),
       0.0
     );
 
@@ -365,7 +369,7 @@ cv::Mat CameraDetectorRenderer::render(
     }
 
     // 6. 弹道前馈超前瞄准点 (AIM LEAD)
-    Eigen::Vector3d lead_aim_pt = ekf_armor_3d + est.velocity * metrics.flight_time;
+    Eigen::Vector3d lead_aim_pt = ekf_armor_3d + ekf_vel_c * metrics.flight_time;
     cv::Point2f px_lead;
     double zc_lead;
     if (project_world_to_cam(lead_aim_pt, cam_pos, gimbal_yaw, gimbal_pitch, px_lead, zc_lead)) {

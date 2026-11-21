@@ -9,7 +9,7 @@ namespace sim
 
 /// 车载相机视觉感知传感器模拟器
 /// 取真值中当前可见装甲板，生成带高斯噪声的视觉观测 ArmorObservation。
-/// 工作系是 gimbal：xyz_in_gimbal / ypd / yaw_raw。xyz_in_world 是装甲 odom 坐标（中间件）。
+/// 工作系是方向不变的 gimbal：xyz_in_gimbal = armor - gimbal.pos。xyz_in_world 是装甲 odom。
 class CameraSensor
 {
 public:

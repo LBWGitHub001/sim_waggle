@@ -9,6 +9,7 @@ namespace sim
 /// 物理与运动学仿真引擎
 /// 积分在 odom（场地惯性系，中间件）：底盘小陀螺、偏置云台、敌车 robot 自转。
 /// 装甲板绑在 robot 系，经 Rz(robot.yaw) 变到 odom。
+/// gimbal 原点跟云台走、轴向与 odom 平行；camera 同原点、轴向 look-at。
 /// ground_truth() 返回 odom 位姿；日常滤波请用 common::express_target_in_gimbal。
 ///
 /// 内部状态分两类：

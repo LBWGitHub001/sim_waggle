@@ -9,9 +9,10 @@
 | 类型 | 关键字段 | 坐标系 |
 |---|---|---|
 | `ChassisState` | `pos, vel, yaw, w` | odom |
-| `GimbalState` | `pos, vel, yaw, pitch, R_gimbal2world` | odom；`R` = gimbal→odom |
+| `GimbalState` | `pos, vel, yaw=0, pitch, R_gimbal2world=I` | odom 原点；轴向与 odom 平行 |
+| `CameraState` | `pos, yaw, pitch, R_camera2odom` | 与 gimbal 同原点；`R` = look-at → odom |
 | `TargetState` | `center, vel, yaw, w, radius, armor_num, armors_pos, armors_yaw` | odom（装甲由 robot 变来） |
-| `GroundTruth` | `t, chassis, gimbal, target, visible_armor_id` | odom 中间件 |
+| `GroundTruth` | `t, chassis, gimbal, camera, target, visible_armor_id` | odom 中间件 |
 | `ArmorObservation` | 见下 | 工作系 gimbal |
 | `TargetEstimate` | 见下 | gimbal |
 | `MetricsResult` | `err_*` / rms | gimbal；定义在 `types.hpp` |
@@ -21,13 +22,13 @@
 
 `ArmorObservation`：
 
-- `xyz_in_gimbal`：工作系（`R^T * (armor_odom - gimbal.pos)`）
+- `xyz_in_gimbal`：工作系（`armor_odom - gimbal.pos`，轴向=odom）
 - `xyz_in_world`：装甲 odom（中间件，滤波/plot 不用）
 - `ypd_in_world`：对 `xyz_in_gimbal` 的 yaw/pitch/distance
-- `yaw_raw`：装甲 yaw 在 gimbal（rad）
+- `yaw_raw`：装甲 yaw 在方向不变的 gimbal（= odom yaw）
 - `confidence, name, color, type, width, height`
 
-`common/frames.hpp`：`express_target_in_gimbal`、`point/vel/yaw_odom_to_gimbal`、`armor_in_robot`。
+`common/frames.hpp`：`express_target_in_gimbal`、`express_target_in_camera`、`point/vel/yaw_odom_to_gimbal`、`point/yaw_odom_to_camera`、`armor_in_robot`。
 
 `TargetEstimate`：
 
@@ -94,7 +95,9 @@ set_chassis_w / set_gimbal_offset / set_target_vel
 r          = Rz(chassis.yaw) * gimbal_offset
 gimbal.pos = chassis.pos + r
 gimbal.vel = chassis.vel + ω × r
-gimbal.yaw = atan2(target.center - gimbal.pos)
+gimbal.yaw = 0，R = I
+camera.pos = gimbal.pos
+camera.yaw = atan2(target.center - gimbal.pos)
 p_i_robot  = (-r cos(2π i/N), -r sin(...), 0)
 armor_i    = center + Rz(robot.yaw) * p_i_robot
 可见板     = 法向·(云台-装甲) 最大者
@@ -232,7 +235,7 @@ CameraDetectorRenderer(width=800, height=600, fov_deg=60)
 render(gt, est, obs, metrics) -> cv::Mat
 ```
 
-针孔、LED 灯条、检测框、EKF 重投影、AIM LEAD。工作系 gimbal：`cam_pos=0`，敌车 `express_target_in_gimbal`。图像经 `logger.plot_image(frame, {{"name","camera_detector"}})` 上报。
+针孔、LED 灯条、检测框、EKF 重投影、AIM LEAD。HUD 在 camera：`cam_pos=0`，敌车 `express_target_in_camera`；Kalman 从 gimbal 旋到 camera。图像经 `logger.plot_image(frame, {{"name","camera_detector"}})` 上报。
 
 ## 7. OmniScope C++（只读使用）
 

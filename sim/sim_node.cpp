@@ -71,6 +71,7 @@ void publish_tfs(const common::GroundTruth & gt)
 {
   omniscope::plot_tfs({
     make_tf("odom", "gimbal", gt.gimbal.pos, gt.gimbal.yaw),
+    make_tf("gimbal", "camera", Eigen::Vector3d::Zero(), gt.camera.yaw),
     make_tf("odom", "robot", gt.target.center, gt.target.yaw),
   });
 }
@@ -78,7 +79,7 @@ void publish_tfs(const common::GroundTruth & gt)
 void publish_gt_markers(const common::GroundTruth & gt)
 {
   std::vector<omniscope::Marker> markers;
-  markers.reserve(16);
+  markers.reserve(20);
 
   {
     omniscope::Marker m;
@@ -143,6 +144,31 @@ void publish_gt_markers(const common::GroundTruth & gt)
     m.points = {{0.0f, 0.0f, 0.0f}, {0.50f, 0.0f, 0.0f}};
     m.scale = {0.025f, 0.05f, 0.05f};
     m.color = to_rgba(1.0f, 0.45f, 0.08f, 1.0f);
+    markers.push_back(m);
+  }
+
+  {
+    omniscope::Marker m;
+    m.frame_id = "camera";
+    m.ns = "my_robot.camera";
+    m.id = 21;
+    m.type = omniscope::MarkerType::SPHERE;
+    m.action = omniscope::MarkerAction::ADD;
+    m.pose.position = {0.0f, 0.0f, 0.0f};
+    m.scale = {0.08f, 0.08f, 0.08f};
+    m.color = to_rgba(0.45f, 0.75f, 1.0f, 1.0f);
+    markers.push_back(m);
+  }
+  {
+    omniscope::Marker m;
+    m.frame_id = "camera";
+    m.ns = "my_robot.camera";
+    m.id = 22;
+    m.type = omniscope::MarkerType::ARROW;
+    m.action = omniscope::MarkerAction::ADD;
+    m.points = {{0.0f, 0.0f, 0.0f}, {0.55f, 0.0f, 0.0f}};
+    m.scale = {0.022f, 0.045f, 0.045f};
+    m.color = to_rgba(0.45f, 0.75f, 1.0f, 1.0f);
     markers.push_back(m);
   }
 

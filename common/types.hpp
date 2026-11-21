@@ -12,12 +12,13 @@ namespace common
 // =============================================================================
 // 坐标系
 //   odom   场地惯性系（中间件）。运动学在此积分；仅 TF 使用这些坐标。
-//   gimbal 云台/相机系（日常工作系）。观测、EKF、plot、误差都在此。
+//   gimbal 云台中心、轴向与 odom 平行（不转）。观测、EKF、plot、误差都在此。
+//   camera 与 gimbal 同原点，轴向随 look-at yaw。只给 HUD / 光轴 TF。
 //   robot  敌车体。装甲板绑在此系；robot 本身在 odom 中转动。
 //
-// GroundTruth 的 chassis / gimbal / target 位姿都是 odom。
+// GroundTruth 的 chassis / gimbal.pos / camera / target 位姿都是 odom。
 // 日常使用请走 frames.hpp 的 express_*_in_gimbal()，不要直接拿 odom 坐标滤波。
-// xyz_in_gimbal / EKF / kal_* / err_* 在 gimbal。
+// xyz_in_gimbal / EKF / kal_* / err_* 在方向不变的 gimbal。
 // xyz_in_world 保留为装甲在 odom 的位置，滤波和 plot 不用。
 // =============================================================================
 
@@ -30,7 +31,7 @@ struct ChassisState
   double w = 0.0; // 自转角速度 (rad/s)
 };
 
-// 2. 本车云台状态（odom）。R_gimbal2world = Rz(yaw) = gimbal → odom
+// 2. 本车云台工作系原点（odom）。轴向与 odom 平行：yaw=0，R=I
 struct GimbalState
 {
   Eigen::Vector3d pos = Eigen::Vector3d::Zero();
@@ -38,6 +39,15 @@ struct GimbalState
   double yaw = 0.0;
   double pitch = 0.0;
   Eigen::Matrix3d R_gimbal2world = Eigen::Matrix3d::Identity();
+};
+
+// 2b. 相机/光轴（与 gimbal 同原点）。R_camera2odom = Rz(look-at yaw)
+struct CameraState
+{
+  Eigen::Vector3d pos = Eigen::Vector3d::Zero();
+  double yaw = 0.0;
+  double pitch = 0.0;
+  Eigen::Matrix3d R_camera2odom = Eigen::Matrix3d::Identity();
 };
 
 // 3. 敌车目标真实状态（odom：center/yaw/armors_pos；装甲几何绑在 robot）
@@ -59,6 +69,7 @@ struct GroundTruth
   double t = 0.0;
   ChassisState chassis;
   GimbalState gimbal;
+  CameraState camera;
   TargetState target;
 
   // 当前由视觉传感器认定的最佳可见装甲板 id，
@@ -69,10 +80,10 @@ struct GroundTruth
 // 5. 传感器产生的装甲板视觉测量 (Observation)
 struct ArmorObservation
 {
-  Eigen::Vector3d xyz_in_gimbal = Eigen::Vector3d::Zero(); // 工作系（随云台 yaw 转）
+  Eigen::Vector3d xyz_in_gimbal = Eigen::Vector3d::Zero(); // 工作系（原点=云台，轴向=odom）
   Eigen::Vector3d xyz_in_world = Eigen::Vector3d::Zero();  // 装甲在 odom（中间件，滤波不用）
   Eigen::Vector3d ypd_in_world = Eigen::Vector3d::Zero(); // yaw, pitch, distance（由 xyz_in_gimbal）
-  double yaw_raw = 0.0; // 装甲 yaw 在 gimbal（rad）
+  double yaw_raw = 0.0; // 装甲 yaw 在方向不变的 gimbal（= odom yaw）
   double confidence = 0.98;
   std::string name = "one";
   std::string color = "blue";
