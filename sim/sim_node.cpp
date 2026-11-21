@@ -65,40 +65,41 @@ void SimNode::publish(double sim_t, uint64_t frame)
   topics_.obs_out.push(std::move(msg));
 
   // ---------------- 遥测：观测组 + 真值组（本节点直接发布）----------------
-  // 世界系：原点 = 云台中心，轴向固定。真值已在此系，不再减 gimbal.pos。
+  // obs / Kalman：世界系（原点=云台）。true_*：辅助惯性系敌车，不含云台公转。
+  const auto & enemy = gt.target_inertial;
   Eigen::Vector3d true_armor = Eigen::Vector3d::Zero();
   double true_armor_yaw = 0.0;
   const int visible_id = gt.visible_armor_id;
-  if (visible_id >= 0 && visible_id < static_cast<int>(gt.target.armors_pos.size())) {
-    true_armor = gt.target.armors_pos[visible_id];
-    true_armor_yaw = gt.target.armors_yaw[visible_id];
+  if (visible_id >= 0 && visible_id < static_cast<int>(enemy.armors_pos.size())) {
+    true_armor = enemy.armors_pos[visible_id];
+    true_armor_yaw = enemy.armors_yaw[visible_id];
   }
 
   // 位置量先发（同量纲、可比）→ 看板默认勾选的就是它们
   omniscope::plot({
-    {"obs_armor_x", obs.xyz_in_world.x()},  // 可见装甲板 x (m)
-    {"obs_armor_y", obs.xyz_in_world.y()},  // 可见装甲板 y (m)
-    {"obs_armor_z", obs.xyz_in_world.z()},  // 可见装甲板 z (m)
+    {"obs_armor_x", obs.xyz_in_world.x()},  // 可见装甲板 x (m) 世界系
+    {"obs_armor_y", obs.xyz_in_world.y()},
+    {"obs_armor_z", obs.xyz_in_world.z()},
   });
   omniscope::plot({
-    {"true_center_x", gt.target.center.x()}, // 目标中心 x   (m)
-    {"true_center_y", gt.target.center.y()}, // 目标中心 y   (m)
-    {"true_center_z", gt.target.center.z()}, // 目标中心 z   (m)
+    {"true_center_x", enemy.center.x()}, // 敌车中心 x (m) 惯性系
+    {"true_center_y", enemy.center.y()},
+    {"true_center_z", enemy.center.z()},
   });
 
   // 其余量（角度/角速度/线速度/装甲板真值）后发 → 侧栏按需勾选
   omniscope::plot({
     {"obs_armor_yaw_deg", obs.yaw_raw * 180.0 / M_PI},        // 装甲板 yaw   (deg)
     {"obs_w_ego", gt.chassis.w},                              // 本车自转     (rad/s)
-    {"true_armor_x", true_armor.x()},                         // 可见装甲板 x (m)
-    {"true_armor_y", true_armor.y()},                         // 可见装甲板 y (m)
-    {"true_armor_z", true_armor.z()},                         // 可见装甲板 z (m)
+    {"true_armor_x", true_armor.x()},                         // 可见装甲板 x (m) 惯性系
+    {"true_armor_y", true_armor.y()},
+    {"true_armor_z", true_armor.z()},
     {"true_armor_yaw_deg", true_armor_yaw * 180.0 / M_PI},    // 装甲板 yaw   (deg)
-    {"true_vel_x", gt.target.vel.x()},                       // 目标速度 x   (m/s)
-    {"true_vel_y", gt.target.vel.y()},                       // 目标速度 y   (m/s)
-    {"true_vel_z", gt.target.vel.z()},                       // 目标速度 z   (m/s)
-    {"true_yaw_deg", gt.target.yaw * 180.0 / M_PI},           // 目标朝向 yaw (deg)
-    {"true_w", gt.target.w},                                  // 目标自转 w   (rad/s)
+    {"true_vel_x", enemy.vel.x()},                           // 敌车速度 x   (m/s) 惯性系
+    {"true_vel_y", enemy.vel.y()},
+    {"true_vel_z", enemy.vel.z()},
+    {"true_yaw_deg", enemy.yaw * 180.0 / M_PI},               // 目标朝向 yaw (deg)
+    {"true_w", enemy.w},                                      // 目标自转 w   (rad/s)
     {"true_w_ego", gt.chassis.w},                             // 本车自转真值 (rad/s)
   });
 }

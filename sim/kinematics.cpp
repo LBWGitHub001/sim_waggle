@@ -133,6 +133,7 @@ void KinematicsEngine::express_in_world_frame()
   const Eigen::Vector3d v_origin = gt_.gimbal.vel;
 
   world_ = gt_;
+  world_.target_inertial = gt_.target;  // 场地系敌车，不含云台公转
   world_.chassis.pos -= origin;
   world_.chassis.vel -= v_origin;
   world_.gimbal.pos = Eigen::Vector3d::Zero();

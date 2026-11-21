@@ -4,10 +4,11 @@
 
 | 名字 | 原点 | 轴向 | 谁用 |
 |---|---|---|---|
-| **世界系** | 绑定云台中心（随云台平移） | **固定，不随云台转** | `GroundTruth`、`xyz_in_world`、EKF、`kal_*`、3D Marker |
+| **世界系** | 绑定云台中心（随云台平移） | **固定，不随云台转** | `xyz_in_world`、EKF、`kal_*`、3D Marker、`gt.target`（渲染） |
+| **辅助惯性系** | 场地/底盘积分原点 | 与世界系平行 | `gt.target_inertial`、`true_*`、Kalman−真值误差 |
 | 相机系 | 云台中心 | 随云台 yaw 转 | `xyz_in_gimbal` |
 
-运动学在辅助惯性系积分，`ground_truth()` 再平移到世界系。对外 `gimbal.pos ≡ 0`、`gimbal.vel ≡ 0`，底盘绕原点公转（杆臂 = `-chassis.pos`）。
+运动学在辅助惯性系积分，`ground_truth()` 再平移到世界系。对外 `gimbal.pos ≡ 0`、`gimbal.vel ≡ 0`，底盘绕原点公转（杆臂 = `-chassis.pos`）。`target_inertial` 保持积分系里的敌车，**不把云台公转算进敌车真值**。
 
 观测（`sim/camera_sensor.cpp`）：
 
@@ -17,23 +18,23 @@ xyz_in_gimbal = R_gimbal2world^T * r_g2a
 xyz_in_world  = r_g2a
 ```
 
-惯性系里云台仍在公转：`p_g = p_chassis + Rz(θ_c)*d`，`|v_g|=ω|d|`。该运动变成世界系里目标的表观速度（`gt.target.vel`）。
+惯性系里云台仍在公转：`p_g = p_chassis + Rz(θ_c)*d`，`|v_g|=ω|d|`。该运动变成世界系里目标的表观速度（`gt.target.vel`），**不是**敌车真值。
 
-默认 `d=(0.05,0,0)` m，`ω_c=12` rad/s → 表观 `|v|=0.6` m/s。README 里 1.2 m/s 对应 `d≈0.1` m。
+默认 `d=(0.05,0,0)` m，`ω_c=12` rad/s → 表观 `|v|=0.6` m/s。静止敌车时 `true_vel≈0`，`kal_vel` 会带这支鬼影。
 
 ## 谁在哪一系发数
 
-全部世界系，禁止再减 `gimbal.pos`。
+观测 / Kalman / 3D 在世界系，禁止再减 `gimbal.pos`。`true_*` 走惯性系敌车。
 
 | 量 | 发布点 |
 |---|---|
-| `obs_armor_*` | SimNode = `obs.xyz_in_world` |
-| `true_center_*` / `true_armor_*` / `true_vel_*` | SimNode = `gt.target.*` |
-| `kal_center_*` / `kal_vel_*` | TrackerNode = EKF |
+| `obs_armor_*` | SimNode = `obs.xyz_in_world`（世界系） |
+| `true_center_*` / `true_armor_*` / `true_vel_*` | SimNode = `gt.target_inertial.*` |
+| `kal_center_*` / `kal_vel_*` | TrackerNode = EKF（世界系） |
 | 3D Marker | `app/main.cpp`，`frame_id="world"` |
-| `err_*` | `app/main.cpp` = Kalman − 真值 |
+| `err_*` | `app/main.cpp` = Kalman − `target_inertial` |
 
-比较曲线：`obs_*` 对齐 `true_armor_*`，`kal_center_*` 对齐 `true_center_*`。
+`kal_center_*` 对齐 `true_center_*` 时**不应贴死**：差一个杆臂圆。`obs_armor_*` 也不再和惯性系 `true_armor_*` 重合。
 
 ## plot 键（已占用，禁止改名）
 

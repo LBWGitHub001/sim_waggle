@@ -8,13 +8,14 @@
 namespace common
 {
 
-/// 误差 = Kalman 状态 − 真值，世界系（原点=云台，轴向固定）。
+/// 误差 = Kalman 状态 − 辅助惯性系敌车真值（target_inertial）。
+/// 不要拿世界系表观 target.center/vel 当敌车真值，否则杆臂鬼影会被抵消。
 struct MetricsResult
 {
-  double err_x = 0.0;   // m   kal.center - gt.target.center
+  double err_x = 0.0;   // m   kal.center - gt.target_inertial.center
   double err_y = 0.0;
   double err_z = 0.0;
-  double err_vx = 0.0;  // m/s kal.velocity - gt.target.vel
+  double err_vx = 0.0;  // m/s kal.velocity - gt.target_inertial.vel
   double err_vy = 0.0;
   double err_vz = 0.0;
   double err_yaw = 0.0; // rad, (-pi, pi]

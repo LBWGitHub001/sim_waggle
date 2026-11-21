@@ -10,11 +10,17 @@ namespace common
 {
 
 // =============================================================================
-// 世界系定义（全工程唯一）
+// 世界系定义（滤波 / 观测 / 3D）
 //   原点：绑定正在旋转的云台旋转中心（随云台平移）
 //   轴向：与惯性系平行，不随云台旋转
-// GroundTruth、xyz_in_world、EKF 状态、3D Marker、遥测曲线均在此系。
+// xyz_in_world、EKF、3D Marker、kal_* 均在此系。
 // 因此 gimbal.pos ≡ 0、gimbal.vel ≡ 0；底盘绕原点公转，杆臂 = -chassis.pos。
+//
+// 敌车平移真值不在此系里“跟着原点晃”：
+//   GroundTruth::target          — 世界系表观量（渲染 / 相机几何）
+//   GroundTruth::target_inertial — 辅助惯性系（场地）敌车，误差与 true_* 用这个
+// 真实自瞄里敌车几乎不动；若把表观运动写进真值，Kalman 会和真值贴在一起，
+// 把杆臂鬼影（约 ω|d|）掩盖掉。
 // =============================================================================
 
 // 1. 本车底盘状态
@@ -56,7 +62,8 @@ struct GroundTruth
   double t = 0.0;
   ChassisState chassis;
   GimbalState gimbal;
-  TargetState target;
+  TargetState target;           // 世界系表观（原点=云台）：给相机渲染 / 观测几何
+  TargetState target_inertial;  // 辅助惯性系敌车：给 true_* 与 Kalman−真值误差
 
   // 当前由视觉传感器认定的最佳可见装甲板 id，
   // 位姿请按 id 索引 target.armors_pos / target.armors_yaw（不再冗余存储）

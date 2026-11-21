@@ -28,7 +28,7 @@ public:
   // 动力学推演步进 dt 秒
   void step(double dt);
 
-  // 当前物理真值（世界系：原点绑定云台，轴向固定）
+  // 当前物理真值：世界系几何 + target_inertial（场地敌车）
   const common::GroundTruth & ground_truth() const { return world_; }
 
   // 动态修改参数（调试时用）

@@ -10,8 +10,8 @@
 |---|---|---|
 | `ChassisState` | `pos, vel, yaw, w` | 世界 |
 | `GimbalState` | `pos, vel, yaw, pitch, R_gimbal2world` | 世界；`pos/vel ≡ 0`；杆臂 = `-chassis.pos` |
-| `TargetState` | `center, vel, yaw, w, radius, armor_num, armors_pos, armors_yaw` | 世界 |
-| `GroundTruth` | `t, chassis, gimbal, target, visible_armor_id` | 世界；装甲位姿按 id 索引，不另存一份 |
+| `TargetState` | `center, vel, yaw, w, radius, armor_num, armors_pos, armors_yaw` | 见 `GroundTruth` |
+| `GroundTruth` | `t, chassis, gimbal, target, target_inertial, visible_armor_id` | `target`=世界系表观（渲染/观测）；`target_inertial`=场地敌车（true_*/误差） |
 | `ArmorObservation` | 见下 | 混系，见 frames |
 | `TargetEstimate` | 见下 | 世界系（与 EKF 相同） |
 | `StampedObservation` | `obs, sim_t, frame` | SimNode → TrackerNode |
@@ -56,7 +56,7 @@ compute_aim_lead_point(est, flight_time) -> Vector3d
   // armor = center + (-r cos yaw, -r sin yaw, 0) + vel * T
 ```
 
-`MetricsResult`：误差 = Kalman − 真值（世界系）。
+`MetricsResult`：误差 = Kalman − `gt.target_inertial`（场地敌车，不含云台公转）。
 
 - 分量：`err_{x,y,z,vx,vy,vz,yaw,w,r}`
 - 范数：`pos_err_norm = |Δcenter|`，`vel_err_norm = |Δvel|`

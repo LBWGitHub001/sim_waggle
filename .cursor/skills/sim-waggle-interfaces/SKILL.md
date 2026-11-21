@@ -56,11 +56,13 @@ sim/  ──Channel<StampedObservation>──►  tracker/
 轴向：与惯性系平行，不随云台旋转
 ```
 
-`GroundTruth` / `xyz_in_world` / EKF / 3D Marker / 遥测都在此系。因此 `gimbal.pos ≡ 0`、`gimbal.vel ≡ 0`，底盘绕原点公转。
+`xyz_in_world` / EKF / `kal_*` / 3D Marker / 相机渲染用 `GroundTruth::target` 都在此系。因此 `gimbal.pos ≡ 0`、`gimbal.vel ≡ 0`，底盘绕原点公转。
 
 `xyz_in_gimbal` 才是随云台 yaw 转的相机系。不要再减一遍 `gimbal.pos`。
 
-误差：**Kalman 状态 − 真值**（同一世界系）。`err_*` 曲线由 `app/main.cpp` 在 metrics 之后 `plot`。
+敌车平移真值用 **`GroundTruth::target_inertial`（辅助惯性系 / 场地）**，不要用世界系表观 `target.center/vel`。把云台公转写进真值会让 Kalman 和真值贴在一起，不像真实自瞄。
+
+误差：**Kalman 状态 − `target_inertial`**。默认 `d=0.05` m、`ω=12` rad/s 时位置差约杆臂圆（cm 级）、速度差约 `ω|d|=0.6` m/s。`err_*` 由 `app/main.cpp` 在 metrics 之后 `plot`。
 
 细节与 plot/marker 表见 [frames-and-telemetry.md](frames-and-telemetry.md)。
 
@@ -124,7 +126,7 @@ main 上的实现是 `tracker::BaselineTracker`，忠实还原 auto_aim，**不�
 ## 硬约束
 
 - 每完成一步就 `git commit`（见上文「Git：每一步都提交」）
-- 不改世界系定义（原点=云台中心，轴向固定）
+- 不改世界系定义（原点=云台中心，轴向固定）；敌车平移真值用 `target_inertial`，不用表观 `target.vel`
 - 不让 `sim/` 看见 `tracker/`，反之亦然
 - 不改 OmniScope 源码
 - 不把实验合进 `main`，除非明确要求提升为新基线

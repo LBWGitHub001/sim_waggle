@@ -67,24 +67,26 @@ MetricsResult SimulationMetrics::update(
     return r;
   }
 
-  r.err_x = est.center.x() - gt.target.center.x();
-  r.err_y = est.center.y() - gt.target.center.y();
-  r.err_z = est.center.z() - gt.target.center.z();
-  r.err_vx = est.velocity.x() - gt.target.vel.x();
-  r.err_vy = est.velocity.y() - gt.target.vel.y();
-  r.err_vz = est.velocity.z() - gt.target.vel.z();
-  r.err_yaw = normalize_angle(est.yaw - gt.target.yaw);
-  r.err_w = est.w - gt.target.w;
-  r.err_r = est.radius - gt.target.radius;
+  const TargetState & truth = gt.target_inertial;
 
-  r.pos_err_norm = (est.center - gt.target.center).norm();
-  r.vel_err_norm = (est.velocity - gt.target.vel).norm();
-  r.armor_err_norm = armor_fit_error(est, gt.target);
+  r.err_x = est.center.x() - truth.center.x();
+  r.err_y = est.center.y() - truth.center.y();
+  r.err_z = est.center.z() - truth.center.z();
+  r.err_vx = est.velocity.x() - truth.vel.x();
+  r.err_vy = est.velocity.y() - truth.vel.y();
+  r.err_vz = est.velocity.z() - truth.vel.z();
+  r.err_yaw = normalize_angle(est.yaw - truth.yaw);
+  r.err_w = est.w - truth.w;
+  r.err_r = est.radius - truth.radius;
+
+  r.pos_err_norm = (est.center - truth.center).norm();
+  r.vel_err_norm = (est.velocity - truth.vel).norm();
+  r.armor_err_norm = armor_fit_error(est, truth);
 
   const double v_b = (bullet_speed > 1.0) ? bullet_speed : 25.0;
   r.flight_time = est.center.norm() / v_b;
   const Eigen::Vector3d aim_kal = compute_aim_lead_point(est, r.flight_time);
-  const Eigen::Vector3d aim_true = compute_aim_lead_point(truth_as_estimate(gt.target), r.flight_time);
+  const Eigen::Vector3d aim_true = compute_aim_lead_point(truth_as_estimate(truth), r.flight_time);
   r.aim_lead_bias = (aim_kal - aim_true).norm();
   r.nis = est.last_nis;
 
