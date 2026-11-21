@@ -146,6 +146,19 @@ void publish_gt_markers(const common::GroundTruth & gt)
     markers.push_back(m);
   }
 
+  {
+    omniscope::Marker m;
+    m.frame_id = "robot";
+    m.ns = "robot.center";
+    m.id = 0;
+    m.type = omniscope::MarkerType::SPHERE;
+    m.action = omniscope::MarkerAction::ADD;
+    m.pose.position = {0.0f, 0.0f, 0.0f};
+    m.scale = {0.10f, 0.10f, 0.10f};
+    m.color = to_rgba(0.35f, 1.0f, 0.45f, 0.95f);
+    markers.push_back(m);
+  }
+
   const int n = gt.target.armor_num;
   const double radius = gt.target.radius;
   for (int i = 0; i < n; i++) {

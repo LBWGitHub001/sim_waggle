@@ -81,6 +81,7 @@ err_pos / err_vel        m / m/s
 |---|---|---|---|---|
 | `my_robot.chassis` | 0 / 1 | SPHERE / ARROW | SimNode | `odom` |
 | `my_robot.gimbal` | 11 / 12 | SPHERE / ARROW | SimNode | `gimbal` |
+| `robot.center` | 0 | SPHERE | SimNode | `robot`（原点） |
 | `robot.armor` | i | CUBE | SimNode | `robot`（板位固定） |
 | `kalman.center` | 50 | SPHERE | TrackerNode | `gimbal` |
 | `kalman.vel` | 52 | ARROW | TrackerNode | `gimbal` |
@@ -89,7 +90,13 @@ err_pos / err_vel        m / m/s
 
 装甲几何常量：灯条 56 mm、小板宽 135 mm、厚 15 mm。姿态 `armor_quat(yaw)` 带 15° pitch。
 
-Host 3D 侧栏按 `ns` 分组。当前查看系只列出 TF 里真实存在的系（`odom` / `gimbal` / `robot`），**不要** `world`、`chassis`。选中某系时**只显示 `frame_id` 等于该系的 Marker**（不是把所有 Marker 变到该系原点）。
+Host 3D 侧栏按 `ns` 分组。当前查看系只列出 TF 里真实存在的系（`odom` / `gimbal` / `robot`），**不要** `world`、`chassis`。选中某系时，**全部 Marker 经 TF 变到该系再画**（该系原点对齐显示原点）：
+
+- `gimbal`：云台在原点；能看到敌车自转，以及云台公转造成的中心表观运动
+- `robot`：敌车原点在显示原点，装甲板相对固定
+- `odom`：全场。敌车自转 + 中心平动，云台随底盘转
+
+不要再按 `frame_id` 过滤掉其他系的 Marker。场景原点不要再画那组巨大的三箭头；各系姿态用「显示 TF 坐标轴」的小三轴。
 
 TF 树：
 
