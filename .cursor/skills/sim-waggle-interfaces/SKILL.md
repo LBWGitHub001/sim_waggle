@@ -89,12 +89,14 @@ predict_aim_point(flight_time)
 diverged() / last_nis() / name()
 ```
 
+本分支 `TrackerNode` 在每帧 `predict`/`update` 前调用 `set_control(msg.ego_acc)`（gimbal xy 加速度）。
+
 `TrackerNode` 调用序（不要改语义）：首帧只 `update`；之后 `predict(sim_t - last_t)` + `update`；每帧 `estimate()`，用 `gt_in` 做误差，写入 `LatestSlot<TrackerOutput>`（含 `metrics`）。不丢帧。
 
 接线模板（`app/main.cpp`）：
 
 ```cpp
-auto tracker = std::make_unique<tracker::YourTracker>(...);
+auto tracker = std::make_unique<tracker::EgoControlTracker>(...);
 tracker::TrackerNode tracker_node(
   std::move(tracker), obs_channel, est_slot, gt_slot, cfg.sim.bullet_speed);
 ```

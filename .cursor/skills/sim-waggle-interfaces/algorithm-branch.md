@@ -8,7 +8,7 @@
 |---|---|
 | `main` | 仿真平台 + `BaselineTracker`。接口变更只能是加性、向后兼容 |
 | `exp/<name>` | 一个算法一次尝试。从 **当前 `main`** 拉出，不要从另一个 exp 叠 |
-| 现有例子 | `high_freq`（曾作实验，现与 main 同提交）；`exp/kalman-only-markers`（可视化，非滤波） |
+| 现有例子 | `exp/ego-acc`：自车 gimbal xy 加速度作 EKF 控制量 `u`（`EgoControlTracker`） |
 
 不要：在 `main` 上直接改 EKF 模型；从脏工作区切分支；把失败实验 squash 进 main。
 
@@ -57,7 +57,7 @@ git checkout -b exp/<short-name>
 
 1. 在 `StampedObservation` 末尾加字段（带默认值，旧代码仍编译）
 2. `SimNode::publish` 从 `gt.gimbal` / `gt.chassis` 填写
-3. 在本分支的 `TrackerNode::run` 里把新字段交给具体 tracker，不要为此引入虚基类
+3. 在本分支的 `TrackerNode::run` 里把新字段交给具体 tracker（例如 `set_control(msg.ego_acc)`），不要为此引入虚基类
 
 不要为了传 ω 去 include `sim/kinematics.hpp`。
 

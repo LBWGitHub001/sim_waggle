@@ -16,7 +16,7 @@
 | `ArmorObservation` | 见下 | 工作系 gimbal |
 | `TargetEstimate` | 见下 | gimbal |
 | `MetricsResult` | `err_*` / rms | gimbal；定义在 `types.hpp` |
-| `StampedObservation` | `obs, sim_t, frame` | SimNode → TrackerNode |
+| `StampedObservation` | `obs, sim_t, frame, ego_acc` | SimNode → TrackerNode；本分支 `ego_acc` 为 gimbal xy |
 | `TrackerOutput` | `est, sim_t, metrics` | TrackerNode → 可视化 / HUD |
 | `SimulationConfig` | 见 YAML 映射 | — |
 
@@ -141,12 +141,22 @@ BaselineTracker(target_radius=0.20, armor_num=4, EkfParams, p0=Zero(11))
 
 `update` 在 `target_==nullptr` 时调 `init`。`to_auto_aim_armor` 必须写 `ypr_in_world = (yaw_raw, 0, 0)`，否则 yaw 通道恒 0。
 
+### `EgoControlTracker`（本分支）
+
+```
+EgoControlTracker(target_radius=0.20, armor_num=4, EkfParams, p0=Zero(11))
+set_control(ego_acc)   // gimbal xy，z 忽略
+predict(dt)            // 内部 Target::predict(dt, u_)
+```
+
+`u = (-a_x, -a_y, 0)`，`a` 为云台原点有限差分加速度。过程模型只在 x/y 上加 `0.5 dt^2 a` 与 `dt a`。
+
 ### `auto_aim::Target` / `EkfParams`
 
 ```
 EkfParams { q_xyz_acc_var=100, q_yaw_acc_var=75, r_yaw=0.04, r_pitch=0.04, r_dist_base=0.015 }
 Target(armor, t, radius, armor_num, P0_dig, ekf_params)
-predict(dt) / update(armor)
+predict(dt) / predict(dt, acc) / update(armor)
 ekf_x() / ekf() / armor_xyza_list() / diverged()
 ```
 
@@ -173,12 +183,12 @@ update(z, H, R, z_subtract) / update(z, H, R, h, z_subtract)
 ### `TrackerNode`
 
 ```
-TrackerNode(unique_ptr<BaselineTracker>, Channel<StampedObservation>&,
+TrackerNode(unique_ptr<EgoControlTracker>, Channel<StampedObservation>&,
             LatestSlot<TrackerOutput>&, LatestSlot<GroundTruth>&, bullet_speed=25)
 start() / stop() / join() / finished()
 ```
 
-每帧 `estimate()` 后 `express_target_in_gimbal` + `SimulationMetrics::update`，写 `TrackerOutput.metrics`，发 `kal_*`/`err_*` 与 Kalman Marker。
+每帧先 `set_control(msg.ego_acc)`，再 `predict`/`update`；`estimate()` 后 `express_target_in_gimbal` + `SimulationMetrics::update`，写 `TrackerOutput.metrics`，发 `kal_*`/`err_*` 与 Kalman Marker。
 
 ## 4. `app/` 接线
 
