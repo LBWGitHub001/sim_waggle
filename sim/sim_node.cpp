@@ -3,9 +3,171 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <vector>
+
+#include <Eigen/Geometry>
+#include <omniscope/marker.hpp>
+
+#include "frames.hpp"
 
 namespace sim
 {
+namespace
+{
+constexpr double kLightbar = 56e-3;
+constexpr double kArmorWidth = 135e-3;
+constexpr double kArmorThick = 0.015;
+
+omniscope::Vector3 to_vec3(const Eigen::Vector3d & v)
+{
+  return {static_cast<float>(v.x()), static_cast<float>(v.y()), static_cast<float>(v.z())};
+}
+
+omniscope::Quaternion eigen_quat_to_omni(const Eigen::Quaterniond & q)
+{
+  omniscope::Quaternion oq;
+  oq.x = static_cast<float>(q.x());
+  oq.y = static_cast<float>(q.y());
+  oq.z = static_cast<float>(q.z());
+  oq.w = static_cast<float>(q.w());
+  return oq;
+}
+
+omniscope::ColorRGBA to_rgba(float r, float g, float b, float a = 1.0f)
+{
+  return {r, g, b, a};
+}
+
+Eigen::Quaterniond armor_quat(double yaw)
+{
+  const double pitch = 15.0 * M_PI / 180.0;
+  const double sy = std::sin(yaw);
+  const double cy = std::cos(yaw);
+  const double sp = std::sin(pitch);
+  const double cp = std::cos(pitch);
+  Eigen::Matrix3d R;
+  R << cy * cp, -sy, cy * sp,
+       sy * cp,  cy, sy * sp,
+           -sp,   0,      cp;
+  return Eigen::Quaterniond(R);
+}
+
+omniscope::TransformStamped make_tf(
+  const std::string & parent,
+  const std::string & child,
+  const Eigen::Vector3d & translation,
+  double yaw)
+{
+  omniscope::TransformStamped tf;
+  tf.parent = parent;
+  tf.child = child;
+  tf.translation = to_vec3(translation);
+  const Eigen::Quaterniond q(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+  tf.rotation = eigen_quat_to_omni(q);
+  return tf;
+}
+
+void publish_tfs(const common::GroundTruth & gt, const Eigen::Vector3d & gimbal_offset)
+{
+  omniscope::plot_tfs({
+    make_tf("odom", "chassis", gt.chassis.pos, gt.chassis.yaw),
+    make_tf("chassis", "gimbal", gimbal_offset, common::wrap_pi(gt.gimbal.yaw - gt.chassis.yaw)),
+    make_tf("odom", "robot", gt.target.center, gt.target.yaw),
+  });
+}
+
+void publish_gt_markers(const common::GroundTruth & gt)
+{
+  std::vector<omniscope::Marker> markers;
+  markers.reserve(16);
+
+  {
+    omniscope::Marker m;
+    m.ns = "ground_truth.target";
+    m.action = omniscope::MarkerAction::DELETEALL;
+    markers.push_back(m);
+  }
+  {
+    omniscope::Marker m;
+    m.ns = "ground_truth.armor";
+    m.action = omniscope::MarkerAction::DELETEALL;
+    markers.push_back(m);
+  }
+
+  {
+    omniscope::Marker m;
+    m.frame_id = "chassis";
+    m.ns = "my_robot.chassis";
+    m.id = 0;
+    m.type = omniscope::MarkerType::SPHERE;
+    m.action = omniscope::MarkerAction::ADD;
+    m.pose.position = {0.0f, 0.0f, 0.0f};
+    m.scale = {0.16f, 0.16f, 0.16f};
+    m.color = to_rgba(0.0f, 0.94f, 1.0f, 0.95f);
+    markers.push_back(m);
+  }
+  {
+    omniscope::Marker m;
+    m.frame_id = "chassis";
+    m.ns = "my_robot.chassis";
+    m.id = 1;
+    m.type = omniscope::MarkerType::ARROW;
+    m.action = omniscope::MarkerAction::ADD;
+    m.points = {{0.0f, 0.0f, 0.0f}, {0.40f, 0.0f, 0.0f}};
+    m.scale = {0.035f, 0.07f, 0.07f};
+    m.color = to_rgba(0.0f, 0.94f, 1.0f, 1.0f);
+    markers.push_back(m);
+  }
+
+  {
+    omniscope::Marker m;
+    m.frame_id = "gimbal";
+    m.ns = "my_robot.gimbal";
+    m.id = 11;
+    m.type = omniscope::MarkerType::SPHERE;
+    m.action = omniscope::MarkerAction::ADD;
+    m.pose.position = {0.0f, 0.0f, 0.0f};
+    m.scale = {0.11f, 0.11f, 0.11f};
+    m.color = to_rgba(1.0f, 0.85f, 0.1f, 1.0f);
+    markers.push_back(m);
+  }
+  {
+    omniscope::Marker m;
+    m.frame_id = "gimbal";
+    m.ns = "my_robot.gimbal";
+    m.id = 12;
+    m.type = omniscope::MarkerType::ARROW;
+    m.action = omniscope::MarkerAction::ADD;
+    m.points = {{0.0f, 0.0f, 0.0f}, {0.50f, 0.0f, 0.0f}};
+    m.scale = {0.025f, 0.05f, 0.05f};
+    m.color = to_rgba(1.0f, 0.95f, 0.2f, 1.0f);
+    markers.push_back(m);
+  }
+
+  const int n = gt.target.armor_num;
+  const double radius = gt.target.radius;
+  for (int i = 0; i < n; i++) {
+    const Eigen::Vector3d p = common::armor_in_robot(i, n, radius);
+    const double yaw_i = common::armor_yaw_in_robot(i, n);
+    omniscope::Marker m;
+    m.frame_id = "robot";
+    m.ns = "robot.armor";
+    m.id = i;
+    m.type = omniscope::MarkerType::CUBE;
+    m.action = omniscope::MarkerAction::ADD;
+    m.pose.position = to_vec3(p);
+    m.pose.orientation = eigen_quat_to_omni(armor_quat(yaw_i));
+    m.scale = {
+      static_cast<float>(kArmorThick),
+      static_cast<float>(kArmorWidth),
+      static_cast<float>(kLightbar)};
+    m.color = to_rgba(0.2f, 0.85f, 0.35f, 0.90f);
+    markers.push_back(m);
+  }
+
+  omniscope::plot_markers(markers);
+}
+}  // namespace
 
 SimNode::SimNode(const common::SimulationConfig & cfg, Topics topics)
 : cfg_(cfg), topics_(topics), kinematics_(cfg), sensor_(cfg)
@@ -28,28 +190,22 @@ void SimNode::run()
   const double dt = 1.0 / static_cast<double>(fps);
   const auto frame_interval = std::chrono::microseconds(1000000 / fps);
 
-  // t = 0 初始帧：发布初始真值与初始观测（TrackerNode 用首帧做 init）
   publish(0.0, 0);
 
   auto next_tick = std::chrono::steady_clock::now();
   while (!stop_requested_.load()) {
-    // 1. 物理推进一帧
     kinematics_.step(dt);
     frame_++;
-    const double sim_t = frame_ * dt;  // 确定性仿真时钟
+    const double sim_t = frame_ * dt;
 
-    // 2. 发布真值快照与观测
     publish(sim_t, frame_);
 
-    // duration 到点：发完本帧后收尾
     if (cfg_.duration > 0.0 && sim_t >= cfg_.duration) break;
 
-    // 3. 维持固定帧率
     next_tick += frame_interval;
     std::this_thread::sleep_until(next_tick);
   }
 
-  // 4. 关闭观测通道：下游 TrackerNode 排空后退出
   topics_.obs_out.close();
   finished_ = true;
 }
@@ -64,9 +220,7 @@ void SimNode::publish(double sim_t, uint64_t frame)
   topics_.obs_latest.set(msg);
   topics_.obs_out.push(std::move(msg));
 
-  // ---------------- 遥测：观测组 + 真值组（本节点直接发布）----------------
-  // 过渡：commit 3 会改成 gimbal 系 true_* / obs_*。此处先用 odom target 替代已删除的 target_inertial。
-  const auto & enemy = gt.target;
+  const common::TargetState enemy = common::express_target_in_gimbal(gt);
   Eigen::Vector3d true_armor = Eigen::Vector3d::Zero();
   double true_armor_yaw = 0.0;
   const int visible_id = gt.visible_armor_id;
@@ -75,33 +229,33 @@ void SimNode::publish(double sim_t, uint64_t frame)
     true_armor_yaw = enemy.armors_yaw[visible_id];
   }
 
-  // 位置量先发（同量纲、可比）→ 看板默认勾选的就是它们
   omniscope::plot({
-    {"obs_armor_x", obs.xyz_in_world.x()},  // 可见装甲板 x (m) 世界系
-    {"obs_armor_y", obs.xyz_in_world.y()},
-    {"obs_armor_z", obs.xyz_in_world.z()},
+    {"obs_armor_x", obs.xyz_in_gimbal.x()},
+    {"obs_armor_y", obs.xyz_in_gimbal.y()},
+    {"obs_armor_z", obs.xyz_in_gimbal.z()},
   });
   omniscope::plot({
-    {"true_center_x", enemy.center.x()}, // 敌车中心 x (m) 惯性系
+    {"true_center_x", enemy.center.x()},
     {"true_center_y", enemy.center.y()},
     {"true_center_z", enemy.center.z()},
   });
-
-  // 其余量（角度/角速度/线速度/装甲板真值）后发 → 侧栏按需勾选
   omniscope::plot({
-    {"obs_armor_yaw_deg", obs.yaw_raw * 180.0 / M_PI},        // 装甲板 yaw   (deg)
-    {"obs_w_ego", gt.chassis.w},                              // 本车自转     (rad/s)
-    {"true_armor_x", true_armor.x()},                         // 可见装甲板 x (m) 惯性系
+    {"obs_armor_yaw_deg", obs.yaw_raw * 180.0 / M_PI},
+    {"obs_w_ego", gt.chassis.w},
+    {"true_armor_x", true_armor.x()},
     {"true_armor_y", true_armor.y()},
     {"true_armor_z", true_armor.z()},
-    {"true_armor_yaw_deg", true_armor_yaw * 180.0 / M_PI},    // 装甲板 yaw   (deg)
-    {"true_vel_x", enemy.vel.x()},                           // 敌车速度 x   (m/s) 惯性系
+    {"true_armor_yaw_deg", true_armor_yaw * 180.0 / M_PI},
+    {"true_vel_x", enemy.vel.x()},
     {"true_vel_y", enemy.vel.y()},
     {"true_vel_z", enemy.vel.z()},
-    {"true_yaw_deg", enemy.yaw * 180.0 / M_PI},               // 目标朝向 yaw (deg)
-    {"true_w", enemy.w},                                      // 目标自转 w   (rad/s)
-    {"true_w_ego", gt.chassis.w},                             // 本车自转真值 (rad/s)
+    {"true_yaw_deg", enemy.yaw * 180.0 / M_PI},
+    {"true_w", enemy.w},
+    {"true_w_ego", gt.chassis.w},
   });
+
+  publish_tfs(gt, cfg_.gimbal_offset);
+  publish_gt_markers(gt);
 }
 
 }  // namespace sim
