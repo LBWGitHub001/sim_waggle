@@ -1,17 +1,68 @@
 #include "tracker_node.hpp"
 
 #include <cmath>
+#include <vector>
+
+#include <Eigen/Geometry>
+#include <omniscope/marker.hpp>
 
 #include "fft.hpp"
+#include "frames.hpp"
 
 namespace tracker
 {
+namespace
+{
+constexpr double kLightbar = 56e-3;
+constexpr double kArmorWidth = 135e-3;
+constexpr double kArmorThick = 0.015;
+
+omniscope::Vector3 to_vec3(const Eigen::Vector3d & v)
+{
+  return {static_cast<float>(v.x()), static_cast<float>(v.y()), static_cast<float>(v.z())};
+}
+
+omniscope::Quaternion eigen_quat_to_omni(const Eigen::Quaterniond & q)
+{
+  omniscope::Quaternion oq;
+  oq.x = static_cast<float>(q.x());
+  oq.y = static_cast<float>(q.y());
+  oq.z = static_cast<float>(q.z());
+  oq.w = static_cast<float>(q.w());
+  return oq;
+}
+
+omniscope::ColorRGBA to_rgba(float r, float g, float b, float a = 1.0f)
+{
+  return {r, g, b, a};
+}
+
+Eigen::Quaterniond armor_quat(double yaw)
+{
+  const double pitch = 15.0 * M_PI / 180.0;
+  const double sy = std::sin(yaw);
+  const double cy = std::cos(yaw);
+  const double sp = std::sin(pitch);
+  const double cp = std::cos(pitch);
+  Eigen::Matrix3d R;
+  R << cy * cp, -sy, cy * sp,
+       sy * cp,  cy, sy * sp,
+           -sp,   0,      cp;
+  return Eigen::Quaterniond(R);
+}
+}  // namespace
 
 TrackerNode::TrackerNode(
   std::unique_ptr<BaselineTracker> tracker,
   common::Channel<common::StampedObservation> & obs_in,
-  common::LatestSlot<common::TrackerOutput> & est_out)
-: tracker_(std::move(tracker)), obs_in_(obs_in), est_out_(est_out)
+  common::LatestSlot<common::TrackerOutput> & est_out,
+  common::LatestSlot<common::GroundTruth> & gt_in,
+  double bullet_speed)
+: tracker_(std::move(tracker)),
+  obs_in_(obs_in),
+  est_out_(est_out),
+  gt_in_(gt_in),
+  bullet_speed_(bullet_speed)
 {
 }
 
@@ -25,43 +76,170 @@ void TrackerNode::join()
   if (thread_.joinable()) thread_.join();
 }
 
+void TrackerNode::publish_kalman_markers(
+  const common::TargetEstimate & est, const Eigen::Vector3d & aim_lead_pt)
+{
+  std::vector<omniscope::Marker> markers;
+  markers.reserve(16);
+  const std::string frame = "gimbal";
+  const Eigen::Vector3d zero = Eigen::Vector3d::Zero();
+
+  if (est.x.size() >= 11) {
+    Eigen::Vector3d ekf_center(est.center.x(), est.center.y(), 0.0);
+    Eigen::Vector3d ekf_vel(est.velocity.x(), est.velocity.y(), 0.0);
+
+    {
+      omniscope::Marker m;
+      m.frame_id = frame;
+      m.ns = "kalman.center";
+      m.id = 50;
+      m.type = omniscope::MarkerType::SPHERE;
+      m.action = omniscope::MarkerAction::ADD;
+      m.pose.position = to_vec3(ekf_center);
+      m.scale = {0.10f, 0.10f, 0.10f};
+      m.color = to_rgba(1.0f, 0.45f, 0.05f, 0.95f);
+      markers.push_back(m);
+    }
+    if (ekf_vel.norm() > 0.05) {
+      omniscope::Marker m;
+      m.frame_id = frame;
+      m.ns = "kalman.vel";
+      m.id = 52;
+      m.type = omniscope::MarkerType::ARROW;
+      m.action = omniscope::MarkerAction::ADD;
+      Eigen::Vector3d v_end = ekf_center + ekf_vel * 0.35;
+      m.points = {to_vec3(ekf_center), to_vec3(v_end)};
+      m.scale = {0.035f, 0.07f, 0.07f};
+      m.color = to_rgba(1.0f, 0.25f, 0.05f, 1.0f);
+      markers.push_back(m);
+    }
+
+    std::vector<omniscope::Vector3> ekf_spokes;
+    for (size_t i = 0; i < est.armor_xyza_list.size(); i++) {
+      Eigen::Vector3d p_plate(
+        est.armor_xyza_list[i][0], est.armor_xyza_list[i][1], est.armor_xyza_list[i][2]);
+      double yaw_plate = est.armor_xyza_list[i][3];
+
+      omniscope::Marker m;
+      m.frame_id = frame;
+      m.ns = "kalman.armor";
+      m.id = static_cast<int32_t>(60 + i);
+      m.type = omniscope::MarkerType::CUBE;
+      m.action = omniscope::MarkerAction::ADD;
+      m.pose.position = to_vec3(p_plate);
+      m.pose.orientation = eigen_quat_to_omni(armor_quat(yaw_plate));
+      m.scale = {
+        static_cast<float>(kArmorThick),
+        static_cast<float>(kArmorWidth),
+        static_cast<float>(kLightbar)};
+      m.color = to_rgba(0.15f, 0.60f, 1.0f, 0.90f);
+      markers.push_back(m);
+
+      ekf_spokes.push_back(to_vec3(ekf_center));
+      ekf_spokes.push_back(to_vec3(p_plate));
+    }
+    {
+      omniscope::Marker m;
+      m.frame_id = frame;
+      m.ns = "kalman.armor";
+      m.id = 70;
+      m.type = omniscope::MarkerType::LINE_LIST;
+      m.action = omniscope::MarkerAction::ADD;
+      m.points = ekf_spokes;
+      m.scale = {0.005f, 0.0f, 0.0f};
+      m.color = to_rgba(0.25f, 0.55f, 0.9f, 0.65f);
+      markers.push_back(m);
+    }
+  }
+
+  {
+    omniscope::Marker m;
+    m.frame_id = frame;
+    m.ns = "aim.lead";
+    m.id = 80;
+    m.type = omniscope::MarkerType::SPHERE;
+    m.action = omniscope::MarkerAction::ADD;
+    m.pose.position = to_vec3(aim_lead_pt);
+    m.scale = {0.09f, 0.09f, 0.09f};
+    m.color = to_rgba(1.0f, 0.85f, 0.0f, 1.0f);
+    markers.push_back(m);
+  }
+  {
+    omniscope::Marker m;
+    m.frame_id = frame;
+    m.ns = "aim.lead";
+    m.id = 82;
+    m.type = omniscope::MarkerType::LINE_LIST;
+    m.action = omniscope::MarkerAction::ADD;
+    m.points = {to_vec3(zero), to_vec3(aim_lead_pt)};
+    m.scale = {0.008f, 0.0f, 0.0f};
+    m.color = to_rgba(1.0f, 0.8f, 0.1f, 0.75f);
+    markers.push_back(m);
+  }
+
+  omniscope::plot_markers(markers);
+}
+
 void TrackerNode::run()
 {
   common::StampedObservation msg;
   double last_t = -1.0;
 
-  // 频域发布演示：对观测与估计速度各挂一个滑窗 FFT（N=512, hop=256）
-  // 预期：obs_x 频谱在小陀螺频率（12 rad/s ≈ 1.91 Hz）处出现明显谱峰
-
   while (!stop_requested_.load() && obs_in_.wait_pop(msg)) {
     if (last_t < 0.0) {
-      // 首帧观测：直接 update（tracker 内部自动 init，等价旧流程 init(obs, 0.0)）
       tracker_->update(msg.obs);
     } else {
-      // 后续帧：predict(距上帧的仿真时长) + update
       tracker_->predict(msg.sim_t - last_t);
       tracker_->update(msg.obs);
     }
     last_t = msg.sim_t;
 
     auto target = tracker_->estimate();
-    // 发布估计快照（可视化线程读取）
-    est_out_.set(common::TrackerOutput{target, msg.sim_t});
 
-    // ---------------- 遥测：Kalman 状态组（本节点直接发布）----------------
-    // 世界系：原点=云台中心，轴向固定（与 xyz_in_world 同一系）
+    common::GroundTruth gt;
+    if (gt_in_.get(gt) && target.x.size() >= 11) {
+      common::GroundTruth gt_g = gt;
+      gt_g.target = common::express_target_in_gimbal(gt);
+      metrics_.update(gt_g, target, bullet_speed_);
+    }
+    const common::MetricsResult & metrics = metrics_.latest();
+
+    common::TrackerOutput out;
+    out.est = target;
+    out.sim_t = msg.sim_t;
+    out.metrics = metrics;
+    est_out_.set(out);
+
     if (target.x.size() >= 11) {
       omniscope::plot({
-        {"kal_center_x", target.center.x()},        // 目标中心 x   (m)
-        {"kal_center_y", target.center.y()},        // 目标中心 y   (m)
-        {"kal_center_z", target.center.z()},        // 目标中心 z   (m)
-        {"kal_vel_x", target.velocity.x()},         // 目标速度 x   (m/s)
-        {"kal_vel_y", target.velocity.y()},         // 目标速度 y   (m/s)
-        {"kal_vel_z", target.velocity.z()},         // 目标速度 z   (m/s)
-        {"kal_yaw_deg", target.yaw * 180.0 / M_PI}, // 目标朝向 yaw (deg)
-        {"kal_w", target.w},                        // 目标自转 w   (rad/s)
-        {"kal_radius_mm", target.radius * 1000.0},  // 装甲板半径   (mm)
+        {"kal_center_x", target.center.x()},
+        {"kal_center_y", target.center.y()},
+        {"kal_center_z", target.center.z()},
+        {"kal_vel_x", target.velocity.x()},
+        {"kal_vel_y", target.velocity.y()},
+        {"kal_vel_z", target.velocity.z()},
+        {"kal_yaw_deg", target.yaw * 180.0 / M_PI},
+        {"kal_w", target.w},
+        {"kal_radius_mm", target.radius * 1000.0},
       });
+      omniscope::plot({
+        {"err_x", metrics.err_x},
+        {"err_y", metrics.err_y},
+        {"err_z", metrics.err_z},
+      });
+      omniscope::plot({
+        {"err_vx", metrics.err_vx},
+        {"err_vy", metrics.err_vy},
+        {"err_vz", metrics.err_vz},
+        {"err_yaw_deg", metrics.err_yaw * 180.0 / M_PI},
+        {"err_w", metrics.err_w},
+        {"err_r_mm", metrics.err_r * 1000.0},
+        {"err_pos", metrics.pos_err_norm},
+        {"err_vel", metrics.vel_err_norm},
+      });
+
+      const Eigen::Vector3d aim = common::compute_aim_lead_point(target, metrics.flight_time);
+      publish_kalman_markers(target, aim);
     }
   }
 

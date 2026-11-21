@@ -8,37 +8,40 @@
 
 #include "types.hpp"
 #include "channel.hpp"
+#include "metrics.hpp"
 #include "baseline_tracker.hpp"
 
 namespace tracker
 {
 
-/// 追踪节点 (TrackerNode)
-/// 类似 ROS Node 的独立线程：事件驱动订阅装甲板观测 FIFO 通道，
-/// 逐条执行 predict + update，并发布最新状态估计快照。
-/// 每条观测都被处理（不丢帧、保序），tracker 看到的调用序列
-/// 与旧单线程流水线完全一致（首帧 init，之后每帧 predict(dt)+update）。
+/// 追踪节点：事件驱动消费观测 FIFO，predict+update，发布估计。
+/// 误差分析与 kal_*/err_* / Kalman Marker 都在本节点、gimbal 工作系完成。
 class TrackerNode
 {
 public:
-  // tracker: 由接线层构造注入（本分支具体类型 BaselineTracker）；
-  // obs_in / est_out: 话题通道，生命周期需长于本节点
   TrackerNode(
     std::unique_ptr<BaselineTracker> tracker,
     common::Channel<common::StampedObservation> & obs_in,
-    common::LatestSlot<common::TrackerOutput> & est_out);
+    common::LatestSlot<common::TrackerOutput> & est_out,
+    common::LatestSlot<common::GroundTruth> & gt_in,
+    double bullet_speed = 25.0);
 
-  void start();                       // 启动节点线程
-  void stop() { stop_requested_ = true; }  // 请求停止（处理完当前一条后退出）
-  void join();                        // 等待线程退出
+  void start();
+  void stop() { stop_requested_ = true; }
+  void join();
   bool finished() const { return finished_.load(); }
 
 private:
   void run();
+  void publish_kalman_markers(
+    const common::TargetEstimate & est, const Eigen::Vector3d & aim_lead_pt);
 
   std::unique_ptr<BaselineTracker> tracker_;
   common::Channel<common::StampedObservation> & obs_in_;
   common::LatestSlot<common::TrackerOutput> & est_out_;
+  common::LatestSlot<common::GroundTruth> & gt_in_;
+  double bullet_speed_ = 25.0;
+  common::SimulationMetrics metrics_;
 
   std::thread thread_;
   std::atomic<bool> stop_requested_{false};

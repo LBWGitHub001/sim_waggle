@@ -4,6 +4,8 @@
 #include <cmath>
 #include <algorithm>
 
+#include "common/frames.hpp"
+
 namespace render
 {
 
@@ -146,7 +148,7 @@ void CameraDetectorRenderer::draw_hud(
   cv::putText(img, "TARGET: B1 (ENEMY) | STATUS: TRACKING (50Hz)", cv::Point(18, 48), cv::FONT_HERSHEY_SIMPLEX, 0.40, cv::Scalar(170, 185, 200), 1, cv::LINE_AA);
 
   // 顶部右侧
-  const double ghost_vel = gt.target.vel.head<2>().norm();
+  const double ghost_vel = common::vel_odom_to_gimbal(gt.target.vel, gt.gimbal).head<2>().norm();
   std::string spin_str = fmt::format("CHASSIS W: {:4.1f} rad/s", gt.chassis.w);
   std::string offset_str = fmt::format("OFFSET: {:4.1f} cm", (gt.gimbal.pos - gt.chassis.pos).head<2>().norm() * 100.0);
   std::string ghost_str = fmt::format("GHOST VEL: {:4.2f} m/s", ghost_vel);
@@ -191,15 +193,17 @@ cv::Mat CameraDetectorRenderer::render(
 {
   cv::Mat canvas(h_, w_, CV_8UC3, cv::Scalar(18, 20, 26));
 
-  Eigen::Vector3d cam_pos(gt.gimbal.pos.x(), gt.gimbal.pos.y(), cam_height_);
-  double gimbal_yaw = gt.gimbal.yaw;
+  // 工作系 = gimbal：相机在原点、朝向 +X；敌车用 odom→gimbal 后的真值。
+  const common::TargetState enemy = common::express_target_in_gimbal(gt);
+  Eigen::Vector3d cam_pos(0.0, 0.0, cam_height_);
+  double gimbal_yaw = 0.0;
   double gimbal_pitch = 0.0;
 
   // 1. 地面透视网格
   draw_ground_grid(canvas, cam_pos, gimbal_yaw, gimbal_pitch);
 
   // 2. 敌车底盘多边形轮廓
-  Eigen::Vector3d target_center_3d(gt.target.center.x(), gt.target.center.y(), cam_height_);
+  Eigen::Vector3d target_center_3d(enemy.center.x(), enemy.center.y(), cam_height_);
   std::vector<cv::Point> chassis_pts;
   for (int deg = 0; deg < 360; deg += 30) {
     double rad = deg * CV_PI / 180.0;
@@ -230,9 +234,9 @@ cv::Mat CameraDetectorRenderer::render(
   cv::Point2f detected_center_px(0.0f, 0.0f);
   bool has_detected = false;
 
-  for (size_t i = 0; i < gt.target.armors_pos.size(); i++) {
-    double yaw_i = gt.target.armors_yaw[i];
-    Eigen::Vector3d p_armor(gt.target.armors_pos[i].x(), gt.target.armors_pos[i].y(), cam_height_);
+  for (size_t i = 0; i < enemy.armors_pos.size(); i++) {
+    double yaw_i = enemy.armors_yaw[i];
+    Eigen::Vector3d p_armor(enemy.armors_pos[i].x(), enemy.armors_pos[i].y(), cam_height_);
 
     Eigen::Vector3d n_a(-std::cos(yaw_i) * cp, -std::sin(yaw_i) * cp, sp);
     Eigen::Vector3d u_r(-std::sin(yaw_i), std::cos(yaw_i), 0.0);

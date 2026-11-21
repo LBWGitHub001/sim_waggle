@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <atomic>
 #include <csignal>
 #include <chrono>
 #include <cmath>
@@ -6,12 +8,10 @@
 #include <vector>
 #include <yaml-cpp/yaml.h>
 #include <fmt/format.h>
-#include <Eigen/Geometry>
 #include <omniscope/omniscope.hpp>
 
 #include "common/types.hpp"
 #include "common/channel.hpp"
-#include "common/metrics.hpp"
 #include "sim/sim_node.hpp"
 #include "tracker/baseline_tracker.hpp"
 #include "tracker/tracker_node.hpp"
@@ -26,7 +26,6 @@ void signal_handler(int)
   g_quit = true;
 }
 
-// 应用层全部配置（在 load_config 一处解析，main 中不再有配置样板）
 struct AppConfig
 {
   common::SimulationConfig sim;
@@ -40,7 +39,6 @@ AppConfig load_config(const std::string & path)
   const YAML::Node yaml = YAML::LoadFile(path);
   AppConfig cfg;
 
-  // EKF 初始协方差缺省值（原版 auto_aim 参数）
   cfg.p0.resize(11);
   cfg.p0 << 1, 64, 1, 64, 1, 64, 0.4, 400, 1.0e-5, 1, 1;
 
@@ -99,261 +97,6 @@ AppConfig load_config(const std::string & path)
   }
   return cfg;
 }
-
-constexpr double LIGHTBAR_LENGTH = 56e-3;
-constexpr double SMALL_ARMOR_WIDTH = 135e-3;
-constexpr double ARMOR_THICKNESS = 0.015;
-
-omniscope::Quaternion eigen_quat_to_omni(const Eigen::Quaterniond & q)
-{
-  omniscope::Quaternion oq;
-  oq.x = static_cast<float>(q.x());
-  oq.y = static_cast<float>(q.y());
-  oq.z = static_cast<float>(q.z());
-  oq.w = static_cast<float>(q.w());
-  return oq;
-}
-
-Eigen::Quaterniond armor_quat(double yaw)
-{
-  const double pitch = 15.0 * CV_PI / 180.0;
-  const double sy = std::sin(yaw);
-  const double cy = std::cos(yaw);
-  const double sp = std::sin(pitch);
-  const double cp = std::cos(pitch);
-
-  Eigen::Matrix3d R;
-  R << cy * cp, -sy, cy * sp,
-       sy * cp,  cy, sy * sp,
-           -sp,   0,      cp;
-  return Eigen::Quaterniond(R);
-}
-
-omniscope::Vector3 to_vec3(const Eigen::Vector3d & v)
-{
-  return {static_cast<float>(v.x()), static_cast<float>(v.y()), static_cast<float>(v.z())};
-}
-
-omniscope::ColorRGBA to_rgba(float r, float g, float b, float a = 1.0f)
-{
-  return {r, g, b, a};
-}
-
-omniscope::TransformStamped make_tf(
-  const std::string & parent,
-  const std::string & child,
-  const Eigen::Vector3d & translation,
-  double yaw)
-{
-  omniscope::TransformStamped tf;
-  tf.parent = parent;
-  tf.child = child;
-  tf.translation = to_vec3(translation);
-  const Eigen::Quaterniond q(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
-  tf.rotation = eigen_quat_to_omni(q);
-  return tf;
-}
-
-void publish_tfs(const common::GroundTruth & gt)
-{
-  const Eigen::Vector3d d = gt.gimbal.pos - gt.chassis.pos;
-  const double cy = std::cos(gt.chassis.yaw);
-  const double sy = std::sin(gt.chassis.yaw);
-  const Eigen::Vector3d p_offset(cy * d.x() + sy * d.y(), -sy * d.x() + cy * d.y(), d.z());
-  omniscope::plot_tfs({
-    make_tf("odom", "chassis", gt.chassis.pos, gt.chassis.yaw),
-    make_tf("chassis", "gimbal", p_offset, gt.gimbal.yaw - gt.chassis.yaw),
-    make_tf("odom", "robot", gt.target.center, gt.target.yaw),
-  });
-}
-
-void publish_3d_markers(
-  const common::GroundTruth & gt,
-  const common::TargetEstimate & est,
-  const Eigen::Vector3d & aim_lead_pt)
-{
-  std::vector<omniscope::Marker> markers;
-  markers.reserve(20);
-
-  // 世界系：原点绑定云台中心，轴向固定。GT / Kalman 已在此系，直接落位。
-  // 3D 视口只画 Kalman 状态，不画真值；真值留在曲线 / HUD / 终端。
-  const Eigen::Vector3d zero = Eigen::Vector3d::Zero();
-  const std::string frame = "world";
-
-  // 1. 底盘 (my_robot.chassis)
-  {
-    omniscope::Marker m;
-    m.frame_id = frame;
-    m.ns = "my_robot.chassis";
-    m.id = 0;
-    m.type = omniscope::MarkerType::SPHERE;
-    m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(gt.chassis.pos);
-    m.scale = {0.16f, 0.16f, 0.16f};
-    m.color = to_rgba(0.0f, 0.94f, 1.0f, 0.95f);
-    markers.push_back(m);
-  }
-  {
-    omniscope::Marker m;
-    m.frame_id = frame;
-    m.ns = "my_robot.chassis";
-    m.id = 1;
-    m.type = omniscope::MarkerType::ARROW;
-    m.action = omniscope::MarkerAction::ADD;
-    const Eigen::Vector3d chassis = gt.chassis.pos;
-    Eigen::Vector3d end_pt = chassis + Eigen::Vector3d(0.40 * std::cos(gt.chassis.yaw), 0.40 * std::sin(gt.chassis.yaw), 0.0);
-    m.points = {to_vec3(chassis), to_vec3(end_pt)};
-    m.scale = {0.035f, 0.07f, 0.07f};
-    m.color = to_rgba(0.0f, 0.94f, 1.0f, 1.0f);
-    markers.push_back(m);
-  }
-  // 2. 云台与偏置连杆 (my_robot.gimbal)
-  {
-    omniscope::Marker m;
-    m.frame_id = frame;
-    m.ns = "my_robot.gimbal";
-    m.id = 10;
-    m.type = omniscope::MarkerType::LINE_LIST;
-    m.action = omniscope::MarkerAction::ADD;
-    m.points = {to_vec3(gt.chassis.pos), to_vec3(zero)};
-    m.scale = {0.015f, 0.0f, 0.0f};
-    m.color = to_rgba(1.0f, 0.85f, 0.1f, 1.0f);
-    markers.push_back(m);
-  }
-  {
-    omniscope::Marker m;
-    m.frame_id = frame;
-    m.ns = "my_robot.gimbal";
-    m.id = 11;
-    m.type = omniscope::MarkerType::SPHERE;
-    m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(zero);  // 云台中心 = 原点
-    m.scale = {0.11f, 0.11f, 0.11f};
-    m.color = to_rgba(1.0f, 0.85f, 0.1f, 1.0f);
-    markers.push_back(m);
-  }
-  {
-    omniscope::Marker m;
-    m.frame_id = frame;
-    m.ns = "my_robot.gimbal";
-    m.id = 12;
-    m.type = omniscope::MarkerType::ARROW;
-    m.action = omniscope::MarkerAction::ADD;
-    Eigen::Vector3d aim_dir = Eigen::Vector3d(0.50 * std::cos(gt.gimbal.yaw), 0.50 * std::sin(gt.gimbal.yaw), 0.0);
-    m.points = {to_vec3(zero), to_vec3(aim_dir)};
-    m.scale = {0.025f, 0.05f, 0.05f};
-    m.color = to_rgba(1.0f, 0.95f, 0.2f, 1.0f);
-    markers.push_back(m);
-  }
-  // 3. 清掉 Host 里按 ns:id 常驻的旧真值 marker（停发不会自动消失）
-  {
-    omniscope::Marker m;
-    m.ns = "ground_truth.target";
-    m.action = omniscope::MarkerAction::DELETEALL;
-    markers.push_back(m);
-  }
-  {
-    omniscope::Marker m;
-    m.ns = "ground_truth.armor";
-    m.action = omniscope::MarkerAction::DELETEALL;
-    markers.push_back(m);
-  }
-
-  // 4. 目标：Kalman 状态（中心 / 装甲 / 速度）—— 3D 视口的主内容
-  //    估计未成形（x 维数不足）时不画目标相关 marker。
-  if (est.x.size() >= 11) {
-    Eigen::Vector3d ekf_center(est.center.x(), est.center.y(), 0.0);
-    Eigen::Vector3d ekf_vel(est.velocity.x(), est.velocity.y(), 0.0);
-
-    {
-      omniscope::Marker m;
-      m.frame_id = frame;
-      m.ns = "kalman.center";
-      m.id = 50;
-      m.type = omniscope::MarkerType::SPHERE;
-      m.action = omniscope::MarkerAction::ADD;
-      m.pose.position = to_vec3(ekf_center);
-      m.scale = {0.10f, 0.10f, 0.10f};
-      m.color = to_rgba(1.0f, 0.45f, 0.05f, 0.95f);
-      markers.push_back(m);
-    }
-    if (ekf_vel.norm() > 0.05) {
-      omniscope::Marker m;
-      m.frame_id = frame;
-      m.ns = "kalman.vel";
-      m.id = 52;
-      m.type = omniscope::MarkerType::ARROW;
-      m.action = omniscope::MarkerAction::ADD;
-      Eigen::Vector3d v_end = ekf_center + ekf_vel * 0.35;
-      m.points = {to_vec3(ekf_center), to_vec3(v_end)};
-      m.scale = {0.035f, 0.07f, 0.07f};
-      m.color = to_rgba(1.0f, 0.25f, 0.05f, 1.0f);
-      markers.push_back(m);
-    }
-
-    std::vector<omniscope::Vector3> ekf_spokes;
-    for (size_t i = 0; i < est.armor_xyza_list.size(); i++) {
-      Eigen::Vector3d p_plate(est.armor_xyza_list[i][0], est.armor_xyza_list[i][1], est.armor_xyza_list[i][2]);
-      double yaw_plate = est.armor_xyza_list[i][3];
-
-      omniscope::Marker m;
-      m.frame_id = frame;
-      m.ns = "kalman.armor";
-      m.id = static_cast<int32_t>(60 + i);
-      m.type = omniscope::MarkerType::CUBE;
-      m.action = omniscope::MarkerAction::ADD;
-      m.pose.position = to_vec3(p_plate);
-      m.pose.orientation = eigen_quat_to_omni(armor_quat(yaw_plate));
-      m.scale = {static_cast<float>(ARMOR_THICKNESS), static_cast<float>(SMALL_ARMOR_WIDTH), static_cast<float>(LIGHTBAR_LENGTH)};
-      m.color = to_rgba(0.15f, 0.60f, 1.0f, 0.90f);
-      markers.push_back(m);
-
-      ekf_spokes.push_back(to_vec3(ekf_center));
-      ekf_spokes.push_back(to_vec3(p_plate));
-    }
-    {
-      omniscope::Marker m;
-      m.frame_id = frame;
-      m.ns = "kalman.armor";
-      m.id = 70;
-      m.type = omniscope::MarkerType::LINE_LIST;
-      m.action = omniscope::MarkerAction::ADD;
-      m.points = ekf_spokes;
-      m.scale = {0.005f, 0.0f, 0.0f};
-      m.color = to_rgba(0.25f, 0.55f, 0.9f, 0.65f);
-      markers.push_back(m);
-    }
-  }
-
-  // 5. 弹道前馈超前瞄准点 (aim.lead)
-  {
-    omniscope::Marker m;
-    m.frame_id = frame;
-    m.ns = "aim.lead";
-    m.id = 80;
-    m.type = omniscope::MarkerType::SPHERE;
-    m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(aim_lead_pt);
-    m.scale = {0.09f, 0.09f, 0.09f};
-    m.color = to_rgba(1.0f, 0.85f, 0.0f, 1.0f);
-    markers.push_back(m);
-  }
-  {
-    omniscope::Marker m;
-    m.frame_id = frame;
-    m.ns = "aim.lead";
-    m.id = 82;
-    m.type = omniscope::MarkerType::LINE_LIST;
-    m.action = omniscope::MarkerAction::ADD;
-    m.points = {to_vec3(zero), to_vec3(aim_lead_pt)};  // 从云台中心（原点）射出
-    m.scale = {0.008f, 0.0f, 0.0f};
-    m.color = to_rgba(1.0f, 0.8f, 0.1f, 0.75f);
-    markers.push_back(m);
-  }
-
-  omniscope::RemoteLogger::instance().plot_markers(markers);
-  publish_tfs(gt);
-}
 }  // namespace
 
 int main(int argc, char * argv[])
@@ -361,7 +104,6 @@ int main(int argc, char * argv[])
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);
 
-  // 配置：默认 configs/sim_waggle.yaml，可用 argv[1] 指定其他 YAML 路径
   if (argc > 2) {
     std::cerr << "Usage: " << argv[0] << " [config.yaml]" << std::endl;
     return 1;
@@ -376,30 +118,23 @@ int main(int argc, char * argv[])
     return 1;
   }
 
-  // ------------------------------------------------------------------
-  // 1. 话题通道（类似 ROS topics，两节点唯一的耦合点）
-  // ------------------------------------------------------------------
-  common::Channel<common::StampedObservation> obs_channel;   // SimNode -> TrackerNode
-  common::LatestSlot<common::GroundTruth> gt_slot;           // SimNode -> 可视化
-  common::LatestSlot<common::StampedObservation> obs_slot;   // SimNode -> 可视化
-  common::LatestSlot<common::TrackerOutput> est_slot;        // TrackerNode -> 可视化
+  common::Channel<common::StampedObservation> obs_channel;
+  common::LatestSlot<common::GroundTruth> gt_slot;
+  common::LatestSlot<common::StampedObservation> obs_slot;
+  common::LatestSlot<common::TrackerOutput> est_slot;
 
-  // ------------------------------------------------------------------
-  // 2. 两个独立节点线程 + 可视化组件
-  // ------------------------------------------------------------------
   sim::SimNode sim_node(cfg.sim, {obs_channel, gt_slot, obs_slot});
 
   auto tracker = std::make_unique<tracker::BaselineTracker>(
     cfg.sim.target_radius, cfg.sim.armor_num, cfg.ekf, cfg.p0);
   const std::string tracker_name = tracker->name();
-  tracker::TrackerNode tracker_node(std::move(tracker), obs_channel, est_slot);
+  tracker::TrackerNode tracker_node(
+    std::move(tracker), obs_channel, est_slot, gt_slot, cfg.sim.bullet_speed);
 
-  // 遥测引擎（唯一初始化点，不再有 bridge 适配层）
   auto & logger = omniscope::RemoteLogger::instance();
   logger.init(cfg.logger);
 
   render::CameraDetectorRenderer renderer(800, 600, 60.0);
-  common::SimulationMetrics metrics_evaluator;
 
   sim_node.start();
   tracker_node.start();
@@ -410,7 +145,7 @@ int main(int argc, char * argv[])
 
   std::cout << "========================================================\n"
             << "  sim_waggle multi-thread node simulation running\n"
-            << "  SimNode (50Hz) --> [FIFO Channel] --> TrackerNode\n"
+            << "  SimNode --> [FIFO Channel] --> TrackerNode\n"
             << "  Active Tracker:     " << tracker_name << "\n"
             << "  Chassis spin speed: " << cfg.sim.chassis_w << " rad/s\n"
             << "  Gimbal offset:      " << cfg.sim.gimbal_offset.norm() * 100.0 << " cm\n"
@@ -418,17 +153,14 @@ int main(int argc, char * argv[])
             << "  OmniScope Portal:   http://127.0.0.1:8080 (3D & Curves)\n"
             << "========================================================\n";
 
-  // ------------------------------------------------------------------
-  // 3. main 可视化循环：只读最新快照，不触碰节点内部状态
-  // ------------------------------------------------------------------
   const auto frame_interval = std::chrono::microseconds(1000000 / std::max(cfg.sim.fps, 1));
   auto last_log = std::chrono::steady_clock::now();
   auto loop_t0 = last_log;
+  common::MetricsResult last_metrics;
 
   while (!g_quit.load()) {
     auto tick_start = std::chrono::steady_clock::now();
 
-    // duration 场景：两节点都收尾后退出
     if (sim_node.finished() && tracker_node.finished()) break;
 
     common::GroundTruth gt;
@@ -438,33 +170,12 @@ int main(int argc, char * argv[])
 
     if (ready) {
       const auto & est = tout.est;
+      const auto & metrics = tout.metrics;
+      last_metrics = metrics;
 
-      // 误差指标与弹道超前落点（全部由快照计算）
-      auto metrics = metrics_evaluator.update(gt, est, cfg.sim.bullet_speed);
-      auto aim_lead_pt = common::compute_aim_lead_point(est, metrics.flight_time);
-
-      // 发布：3D Markers + 相机检测图像 + Kalman−真值误差曲线
-      publish_3d_markers(gt, est, aim_lead_pt);
       cv::Mat frame = renderer.render(gt, est, obs_msg.obs, metrics);
       logger.plot_image(frame, {{"name", "camera_detector"}});
 
-      omniscope::plot({
-        {"err_x", metrics.err_x},
-        {"err_y", metrics.err_y},
-        {"err_z", metrics.err_z},
-      });
-      omniscope::plot({
-        {"err_vx", metrics.err_vx},
-        {"err_vy", metrics.err_vy},
-        {"err_vz", metrics.err_vz},
-        {"err_yaw_deg", metrics.err_yaw * 180.0 / M_PI},
-        {"err_w", metrics.err_w},
-        {"err_r_mm", metrics.err_r * 1000.0},
-        {"err_pos", metrics.pos_err_norm},
-        {"err_vel", metrics.vel_err_norm},
-      });
-
-      // 周期性终端打印（含观测队列深度，>1 说明 tracker 消费跟不上）
       if (tick_start - last_log >= std::chrono::seconds(2)) {
         last_log = tick_start;
         logger.log(
@@ -488,9 +199,6 @@ int main(int argc, char * argv[])
     std::this_thread::sleep_until(tick_start + frame_interval);
   }
 
-  // ------------------------------------------------------------------
-  // 4. 收尾：停 SimNode（通道关闭）→ TrackerNode 排空退出 → join
-  // ------------------------------------------------------------------
   sim_node.stop();
   sim_node.join();
   tracker_node.join();
@@ -498,8 +206,7 @@ int main(int argc, char * argv[])
   const double wall_s =
     std::chrono::duration<double>(std::chrono::steady_clock::now() - loop_t0).count();
 
-  // 退出前输出整段运行的误差汇总（与 OmniScope 曲线同一口径）
-  const auto & m = metrics_evaluator.latest();
+  const auto & m = last_metrics;
   if (m.samples > 0) {
     std::cout << fmt::format(
       "\n===== kalman − truth ({} samples) =====\n"
