@@ -34,7 +34,7 @@ yaw_raw       = armor_yaw_odom - gimbal.yaw
 | `kal_center_*` / `kal_vel_*` | TrackerNode = EKF | gimbal |
 | `err_*` | TrackerNode = Kalman − gimbal 真值 | gimbal |
 | TF | SimNode `plot_tfs`：`odom→gimbal`，`odom→robot` | odom 中间件 |
-| `my_robot.*` / `robot.armor` | SimNode Marker | chassis / gimbal / robot |
+| `my_robot.*` / `robot.armor` | SimNode Marker | odom / gimbal / robot |
 | `kalman.*` / `aim.lead` | TrackerNode Marker，`frame_id=gimbal` | gimbal |
 | 相机 HUD | main `plot_image` 读 `TrackerOutput.metrics` | 渲染 cam_pos=0 |
 
