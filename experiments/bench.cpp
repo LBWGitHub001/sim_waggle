@@ -106,9 +106,11 @@ Result run_case(const Case & c, Variant variant) {
 
   auto obs0 = sensor.observe(kin.ground_truth());
   if (variant == FRAME) {
-    // ground_truth() 已是世界系（gimbal.pos ≡ 0）；此分支保持历史对照，加平移现为 no-op
-    obs0.xyz_in_world += kin.ground_truth().gimbal.pos;
-    obs0.ypd_in_world = tools::xyz2ypd(obs0.xyz_in_world);
+    // S1：把 odom 绝对坐标喂进滤波器工作入口（xyz_in_gimbal）
+    const auto & g0 = kin.ground_truth();
+    obs0.xyz_in_gimbal = obs0.xyz_in_world;
+    obs0.ypd_in_world = tools::xyz2ypd(obs0.xyz_in_gimbal);
+    obs0.yaw_raw = tools::limit_rad(obs0.yaw_raw + g0.gimbal.yaw);
   }
   tr.update(obs0);
 
@@ -118,8 +120,9 @@ Result run_case(const Case & c, Variant variant) {
     const auto & gt = kin.ground_truth();
     auto obs = sensor.observe(gt);
     if (variant == FRAME) {
-      obs.xyz_in_world += gt.gimbal.pos;
-      obs.ypd_in_world = tools::xyz2ypd(obs.xyz_in_world);
+      obs.xyz_in_gimbal = obs.xyz_in_world;
+      obs.ypd_in_world = tools::xyz2ypd(obs.xyz_in_gimbal);
+      obs.yaw_raw = tools::limit_rad(obs.yaw_raw + gt.gimbal.yaw);
     }
     tr.predict(dt);
     tr.update(obs);

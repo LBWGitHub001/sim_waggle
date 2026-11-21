@@ -23,7 +23,7 @@ Target::Target(
 {
   auto r = radius;
   priority = armor.priority;
-  const Eigen::VectorXd & xyz = armor.xyz_in_world;
+  const Eigen::VectorXd & xyz = armor.xyz_in_gimbal;
   const Eigen::VectorXd & ypr = armor.ypr_in_world;
 
   // 旋转中心的坐标
@@ -179,7 +179,7 @@ void Target::update(const Armor & armor)
 void Target::update_ypda(const Armor & armor, int id)
 {
   Eigen::MatrixXd H = h_jacobian(ekf_.x, id);
-  auto center_yaw = std::atan2(armor.xyz_in_world[1], armor.xyz_in_world[0]);
+  auto center_yaw = std::atan2(armor.xyz_in_gimbal[1], armor.xyz_in_gimbal[0]);
   auto delta_angle = tools::limit_rad(armor.ypr_in_world[0] - center_yaw);
 
   Eigen::VectorXd R_dig{

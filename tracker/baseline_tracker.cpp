@@ -30,11 +30,9 @@ auto_aim::Armor BaselineTracker::to_auto_aim_armor(const common::ArmorObservatio
 
   a.xyz_in_gimbal = obs.xyz_in_gimbal;
   a.xyz_in_world = obs.xyz_in_world;
-  a.ypd_in_world = obs.ypd_in_world;
+  a.ypd_in_world = obs.ypd_in_world;  // 由 xyz_in_gimbal 得到
   a.yaw_raw = obs.yaw_raw;
-  // 原版 solver：ypr_in_world = eulers(R_armor2world)，yaw_raw = ypr_in_world[0]。
-  // EKF 的第 4 维观测、装甲板匹配与 R_dig[2] 均消费 ypr_in_world[0]（世界系装甲板 yaw），
-  // 必须映射，否则 yaw 观测通道恒为 0（平移不改变姿态角，仿真语义与原版一致）。
+  // EKF 工作系 = gimbal。第 4 维观测消费 ypr[0] = 装甲 yaw（已在 gimbal）。
   a.ypr_in_world = Eigen::Vector3d(obs.yaw_raw, 0.0, 0.0);
   a.confidence = obs.confidence;
   return a;

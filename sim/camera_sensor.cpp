@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "frames.hpp"
+
 namespace sim
 {
 namespace
@@ -32,31 +34,23 @@ common::ArmorObservation CameraSensor::observe(const common::GroundTruth & gt)
   obs.width = 0.135;
   obs.height = 0.056;
 
-  // 当前可见装甲板的真值位姿
   const auto & armor_pos = gt.target.armors_pos[gt.visible_armor_id];
-  const double armor_yaw = gt.target.armors_yaw[gt.visible_armor_id];
+  const double armor_yaw_odom = gt.target.armors_yaw[gt.visible_armor_id];
 
-  // 1. 世界系：原点=云台中心，故 armor_pos 已是云台→装甲矢量
   const Eigen::Vector3d r_g2a = armor_pos - gt.gimbal.pos;
 
-  // 2. 相机系（随云台 yaw 旋转）
+  // 工作系：旋转相机系。噪声加在 gimbal，ypd / yaw 也在 gimbal。
   obs.xyz_in_gimbal = gt.gimbal.R_gimbal2world.transpose() * r_g2a;
+  obs.xyz_in_world = armor_pos;  // odom 中间件，滤波不用
+  obs.yaw_raw = common::yaw_odom_to_gimbal(armor_yaw_odom, gt.gimbal);
 
-  // 3. 世界系坐标（轴向固定，不做 yaw 旋转）
-  obs.xyz_in_world = r_g2a;
-
-  // 4. 观测高斯白噪声（平面假设：z 向故意不加噪，恒为 0）
   if (cfg_.enable_noise) {
     const Eigen::Vector3d noise(dist_pos_(rng_), dist_pos_(rng_), 0.0);
-    obs.xyz_in_world += noise;
+    obs.xyz_in_gimbal += noise;
+    obs.yaw_raw += dist_yaw_(rng_);
   }
 
-  // 5. 球坐标系观测
-  obs.ypd_in_world = xyz2ypd(obs.xyz_in_world);
-
-  // 6. 装甲板姿态角观测
-  obs.yaw_raw = armor_yaw + (cfg_.enable_noise ? dist_yaw_(rng_) : 0.0);
-
+  obs.ypd_in_world = xyz2ypd(obs.xyz_in_gimbal);
   return obs;
 }
 
