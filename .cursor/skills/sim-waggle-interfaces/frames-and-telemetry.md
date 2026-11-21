@@ -1,54 +1,57 @@
 # 坐标系、曲线与 Marker
 
-## 两套坐标
+## 三系
 
 | 名字 | 原点 | 轴向 | 谁用 |
 |---|---|---|---|
-| **世界系** | 绑定云台中心（随云台平移） | **固定，不随云台转** | `xyz_in_world`、EKF、`kal_*`、3D Marker、`gt.target`（渲染） |
-| **辅助惯性系** | 场地/底盘积分原点 | 与世界系平行 | `gt.target_inertial`、`true_*`、Kalman−真值误差 |
-| 相机系 | 云台中心 | 随云台 yaw 转 | `xyz_in_gimbal` |
+| **odom** | 场地/底盘积分原点 | 固定 | 运动学、TF 中间件。滤波 / plot / 误差 **不用** |
+| **gimbal** | 云台中心 | 随云台 yaw | 观测、EKF、`obs_*`/`true_*`/`kal_*`/`err_*`、Kalman Marker |
+| **robot** | 敌车中心 | 随敌车 yaw | 装甲板绑定；`robot.armor` Marker |
 
-运动学在辅助惯性系积分，`ground_truth()` 再平移到世界系。对外 `gimbal.pos ≡ 0`、`gimbal.vel ≡ 0`，底盘绕原点公转（杆臂 = `-chassis.pos`）。`target_inertial` 保持积分系里的敌车，**不把云台公转算进敌车真值**。
+运动学在 odom 积分：`gimbal.pos = chassis.pos + Rz(θ_c)*d`，装甲 `p_odom = robot.center + Rz(robot.yaw)*p_robot`。`ground_truth()` 返回 odom。日常使用 `express_target_in_gimbal(gt)`（`common/frames.hpp`）。
 
 观测（`sim/camera_sensor.cpp`）：
 
 ```
-r_g2a         = armor_pos - gimbal.pos   // 世界系下 gimbal.pos=0
-xyz_in_gimbal = R_gimbal2world^T * r_g2a
-xyz_in_world  = r_g2a
+r_g2a         = armor_odom - gimbal.pos
+xyz_in_gimbal = R_gimbal2odom^T * r_g2a   // 工作系；加噪、ypd、yaw 都在这
+xyz_in_world  = armor_odom                // 中间件，滤波和 plot 不用
+yaw_raw       = armor_yaw_odom - gimbal.yaw
 ```
 
-惯性系里云台仍在公转：`p_g = p_chassis + Rz(θ_c)*d`，`|v_g|=ω|d|`。该运动变成世界系里目标的表观速度（`gt.target.vel`），**不是**敌车真值。
+`v_gimbal = R^T * (v_odom - gimbal.vel)`，不做 ω×r。默认 `d=0.05` m、`ω_c=12` rad/s 时云台公转 `|v_g|≈0.6` m/s，会出现在 **gimbal 系真值速度**里，Kalman 会去跟。
 
-默认 `d=(0.05,0,0)` m，`ω_c=12` rad/s → 表观 `|v|=0.6` m/s。静止敌车时 `true_vel≈0`，`kal_vel` 会带这支鬼影。
+要看场地上敌车几乎静止：Host 3D 查看系切到 `odom`。
 
-## 谁在哪一系发数
+## 谁发什么
 
-观测 / Kalman / 3D 在世界系，禁止再减 `gimbal.pos`。`true_*` 走惯性系敌车。
+`omniscope::plot` / `plot_markers` / `plot_tfs` **禁止写在 main**。
 
-| 量 | 发布点 |
-|---|---|
-| `obs_armor_*` | SimNode = `obs.xyz_in_world`（世界系） |
-| `true_center_*` / `true_armor_*` / `true_vel_*` | SimNode = `gt.target_inertial.*` |
-| `kal_center_*` / `kal_vel_*` | TrackerNode = EKF（世界系） |
-| 3D Marker | `app/main.cpp`，`frame_id="world"`；Host 按 TF 变到当前查看系 |
-| TF | `app/main.cpp` `plot_tfs`：`field→{world,chassis,gimbal}` |
-| `err_*` | `app/main.cpp` = Kalman − `target_inertial` |
+| 量 | 发布点 | 系 |
+|---|---|---|
+| `obs_armor_*` | SimNode = `obs.xyz_in_gimbal` | gimbal |
+| `true_center_*` / `true_armor_*` / `true_vel_*` | SimNode = `express_target_in_gimbal(gt)` | gimbal |
+| `kal_center_*` / `kal_vel_*` | TrackerNode = EKF | gimbal |
+| `err_*` | TrackerNode = Kalman − gimbal 真值 | gimbal |
+| TF | SimNode `plot_tfs`：`odom→chassis→gimbal`，`odom→robot` | odom 中间件 |
+| `my_robot.*` / `robot.armor` | SimNode Marker | chassis / gimbal / robot |
+| `kalman.*` / `aim.lead` | TrackerNode Marker，`frame_id=gimbal` | gimbal |
+| 相机 HUD | main `plot_image` 读 `TrackerOutput.metrics` | 渲染 cam_pos=0 |
 
-`kal_center_*` 对齐 `true_center_*` 时**不应贴死**：差一个杆臂圆。`obs_armor_*` 也不再和惯性系 `true_armor_*` 重合。
+`kal_*` 对齐 `true_*` 时应接近（噪声 + 装甲跳跃），不是杆臂圆。杆臂表现在 gimbal 系的表观速度上。
 
 ## plot 键（已占用，禁止改名）
 
 SimNode 分三次 `plot`（位置先发，看板默认勾选）：
 
 ```
-obs_armor_x/y/z          m
-true_center_x/y/z        m
+obs_armor_x/y/z          m     gimbal
+true_center_x/y/z        m     gimbal
 obs_armor_yaw_deg        deg
 obs_w_ego                rad/s   (= chassis.w)
-true_armor_x/y/z         m
+true_armor_x/y/z         m     gimbal
 true_armor_yaw_deg       deg
-true_vel_x/y/z           m/s
+true_vel_x/y/z           m/s   gimbal
 true_yaw_deg             deg
 true_w                   rad/s
 true_w_ego               rad/s
@@ -62,11 +65,6 @@ kal_vel_x/y/z            m/s
 kal_yaw_deg              deg
 kal_w                    rad/s
 kal_radius_mm            mm
-```
-
-main（Kalman − 真值）：
-
-```
 err_x/y/z                m
 err_vx/y/z               m/s
 err_yaw_deg              deg
@@ -75,37 +73,35 @@ err_r_mm                 mm
 err_pos / err_vel        m / m/s
 ```
 
-分支上可另 `plot` 新键。禁止改名已有键。
+分支上可另 `plot` 新键。禁止改名已有键。禁止在 main 里 `plot`。
 
 ## 3D Marker 命名空间
 
-`app/main.cpp::publish_3d_markers`，`omniscope::RemoteLogger::instance().plot_markers`。
-
-3D 视口只画 Kalman 状态，不画真值。每帧对 `ground_truth.target` / `ground_truth.armor` 发 `DELETEALL`，清掉 Host 里按 ns:id 常驻的旧真值。
-
-| ns | id | 类型 | 含义 |
-|---|---|---|---|
-| `my_robot.chassis` | 0 / 1 | SPHERE / ARROW | 底盘 + 航向 |
-| `my_robot.gimbal` | 10 / 11 / 12 | LINE_LIST / SPHERE / ARROW | 杆臂、云台原点、瞄准 |
-| `kalman.center` | 50 | SPHERE | 估计中心 |
-| `kalman.vel` | 52 | ARROW | 估计速度（`|v|>0.05` 才画） |
-| `kalman.armor` | 60+i / 70 | CUBE / LINE_LIST | 估计板 + 轮辐 |
-| `aim.lead` | 80 / 82 | SPHERE / LINE_LIST | 超前落点；射线从世界原点（云台）射出 |
+| ns | id | 类型 | 发布 | frame_id |
+|---|---|---|---|---|
+| `my_robot.chassis` | 0 / 1 | SPHERE / ARROW | SimNode | `chassis` |
+| `my_robot.gimbal` | 11 / 12 | SPHERE / ARROW | SimNode | `gimbal` |
+| `robot.armor` | i | CUBE | SimNode | `robot`（板位固定） |
+| `kalman.center` | 50 | SPHERE | TrackerNode | `gimbal` |
+| `kalman.vel` | 52 | ARROW | TrackerNode | `gimbal` |
+| `kalman.armor` | 60+i / 70 | CUBE / LINE_LIST | TrackerNode | `gimbal` |
+| `aim.lead` | 80 / 82 | SPHERE / LINE_LIST | TrackerNode | `gimbal`（射线从原点） |
 
 装甲几何常量：灯条 56 mm、小板宽 135 mm、厚 15 mm。姿态 `armor_quat(yaw)` 带 15° pitch。
 
-Host 3D 侧栏按 `ns` 分组（整组开关 + 组内 Marker 下拉）。视口默认查看 `world`；`plot_tfs` 树：
+Host 3D 侧栏按 `ns` 分组。TF 树：
 
 ```
-field → world    T = (p_gimbal, I)
-field → chassis  T = (p_chassis, Rz(yaw_c))
-field → gimbal   T = (p_gimbal, Rz(yaw_g))
+odom → chassis → gimbal
+odom → robot
 ```
+
+默认查看 `gimbal`。切 `odom` 时 Host 用 TF 把 Marker 变过去。
 
 ## 图像
 
-`plot_image(frame, {{"name", "camera_detector"}})`，800×600。
+`plot_image(frame, {{"name", "camera_detector"}})`，800×600。main 渲染：`cam_pos=0`，敌车已变到 gimbal。
 
 ## 日志
 
-`logger.log("INFO", fmt, ...)`。启动行含 tracker 名、`chassis_w`、offset、fps；每 2 s 打 abs/rel 误差、RMS(rel)、aim_bias、NIS、`obs_channel.size()`。
+`logger.log("INFO", fmt, ...)`。启动行含 tracker 名、`chassis_w`、offset、fps；每 2 s 打 Kalman−gimbal 真值、RMS、aim_bias、NIS、`obs_channel.size()`。

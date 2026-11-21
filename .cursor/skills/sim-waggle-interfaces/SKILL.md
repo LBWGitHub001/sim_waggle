@@ -38,33 +38,35 @@ description: >-
 ```
 sim/  ──Channel<StampedObservation>──►  tracker/
   │                                        │
+  └──LatestSlot<GroundTruth>──────────────►│  （TrackerNode 做误差；main 只读 HUD）
   └──LatestSlot<GroundTruth / obs>──┐      └──LatestSlot<TrackerOutput>──┐
                                     ▼                                    ▼
-                                 app/main.cpp  （唯一接线层 + 3D/图像）
+                                 app/main.cpp  （接线 + plot_image）
 ```
 
 - `sim/` 与 `tracker/` 是独立 CMake 包，**编译期互相看不见头文件**。唯一耦合是 `common/`。
 - 禁止 `#include` 对面包的头。需要新数据就**加性**扩 `common` 消息，不要开第二套类型。
-- `thirdparty/OmniScope`：未点名时不改 SDK 源码；Host UI / 协议可按任务**加性**扩展。遥测直接 `omniscope::plot` / `plot_markers` / `plot_tfs` / `plot_image`，不设 bridge。
+- `thirdparty/OmniScope`：未点名时不改 SDK 源码；Host UI / 协议可按任务**加性**扩展。遥测：`omniscope::plot` / `plot_markers` / `plot_tfs` 只写在 **SimNode / TrackerNode**；main 只允许 `plot_image`。
 
 ## 坐标系（必守）
 
-世界系全工程唯一：
+三系：
 
-```
-原点：绑定正在旋转的云台中心（随云台平移）
-轴向：与惯性系平行，不随云台旋转
-```
+| 名字 | 角色 |
+|---|---|
+| **odom** | 场地惯性系。运动学积分、TF 中间件。日常滤波 / plot / 误差 **禁止**直接用 odom 坐标 |
+| **gimbal** | 云台/相机系（原点=云台，轴向随 yaw）。观测、EKF、`obs_*`/`true_*`/`kal_*`/`err_*`、Kalman Marker |
+| **robot** | 敌车体。装甲板绑在此系；robot 在 odom 中转动 |
 
-`xyz_in_world` / EKF / `kal_*` / 3D Marker / 相机渲染用 `GroundTruth::target` 都在此系。因此 `gimbal.pos ≡ 0`、`gimbal.vel ≡ 0`，底盘绕原点公转。
+`GroundTruth` 的 chassis/gimbal/target 是 odom。日常使用 `common::express_target_in_gimbal(gt)`（[`frames.hpp`](../../../common/frames.hpp)）。
 
-`xyz_in_gimbal` 才是随云台 yaw 转的相机系。不要再减一遍 `gimbal.pos`。
+EKF 吃 `xyz_in_gimbal`。`xyz_in_world` 是装甲 odom 坐标，滤波和 plot 不用。
 
-敌车平移真值用 **`GroundTruth::target_inertial`（辅助惯性系 / 场地）**，不要用世界系表观 `target.center/vel`。把云台公转写进真值会让 Kalman 和真值贴在一起，不像真实自瞄。
+误差在 **TrackerNode**：Kalman − gimbal 系敌车真值。Kalman 会跟上云台里的表观运动；要看场地里敌车几乎静止，把 Host 3D 查看系切到 `odom`。
 
-误差：**Kalman 状态 − `target_inertial`**。默认 `d=0.05` m、`ω=12` rad/s 时位置差约杆臂圆（cm 级）、速度差约 `ω|d|=0.6` m/s。`err_*` 由 `app/main.cpp` 在 metrics 之后 `plot`。
+`omniscope::plot` 禁止写在 `app/main.cpp`。
 
-细节与 plot/marker 表见 [frames-and-telemetry.md](frames-and-telemetry.md)。
+细节见 [frames-and-telemetry.md](frames-and-telemetry.md)。
 
 ## 算法接入（分支上做）
 
@@ -86,13 +88,14 @@ predict_aim_point(flight_time)
 diverged() / last_nis() / name()
 ```
 
-`TrackerNode` 调用序（不要改语义）：首帧只 `update`；之后 `predict(sim_t - last_t)` + `update`；每帧 `estimate()` 写入 `LatestSlot`。不丢帧。
+`TrackerNode` 调用序（不要改语义）：首帧只 `update`；之后 `predict(sim_t - last_t)` + `update`；每帧 `estimate()`，用 `gt_in` 做误差，写入 `LatestSlot<TrackerOutput>`（含 `metrics`）。不丢帧。
 
 接线模板（`app/main.cpp`）：
 
 ```cpp
 auto tracker = std::make_unique<tracker::YourTracker>(...);
-tracker::TrackerNode tracker_node(std::move(tracker), obs_channel, est_slot);
+tracker::TrackerNode tracker_node(
+  std::move(tracker), obs_channel, est_slot, gt_slot, cfg.sim.bullet_speed);
 ```
 
 完整检查单见 [algorithm-branch.md](algorithm-branch.md)。
@@ -104,7 +107,7 @@ tracker::TrackerNode tracker_node(std::move(tracker), obs_channel, est_slot);
 | `Channel<T>` | FIFO，`push` 不阻塞；`close` 后排空才返回 false |
 | `LatestSlot<T>` | keep_last(1)，可视化只读拷贝 |
 | `SimNode` | fps 推进；先发 t=0；话题：`obs_out` / `gt_out` / `obs_latest` |
-| `TrackerNode` | 注入 `unique_ptr<本分支具体 Tracker>`；消费 FIFO，写 `est_out` |
+| `TrackerNode` | 注入 `unique_ptr<本分支具体 Tracker>`；消费 FIFO；读 `gt_in` 做误差；写 `est_out`（含 `metrics`）；发 `kal_*`/`err_*`/Kalman Marker |
 | 收尾 | `sim.stop(); sim.join(); tracker.join();`（sim 关通道） |
 
 仿真时钟 `sim_t = frame * dt`，与墙钟无关。传感器 RNG 种子 42，可复现。
@@ -126,7 +129,8 @@ main 上的实现是 `tracker::BaselineTracker`，忠实还原 auto_aim，**不�
 ## 硬约束
 
 - 每完成一步就 `git commit` 并立刻 `git push`（见上文「Git：每一步都提交并推送」）
-- 不改世界系定义（原点=云台中心，轴向固定）；敌车平移真值用 `target_inertial`，不用表观 `target.vel`
+- 工作系 = gimbal；odom 只作运动学/TF 中间件；不要把 odom 坐标喂给 EKF 或 `plot`
+- `omniscope::plot` / `plot_markers` / `plot_tfs` 只写在 SimNode / TrackerNode；误差分析在 TrackerNode
 - 不让 `sim/` 看见 `tracker/`，反之亦然
 - 不改 OmniScope 源码（除非任务明确要求改 Host / 加性协议）
 - 不把实验合进 `main`，除非明确要求提升为新基线

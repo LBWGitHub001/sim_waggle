@@ -8,23 +8,26 @@
 
 | 类型 | 关键字段 | 坐标系 |
 |---|---|---|
-| `ChassisState` | `pos, vel, yaw, w` | 世界 |
-| `GimbalState` | `pos, vel, yaw, pitch, R_gimbal2world` | 世界；`pos/vel ≡ 0`；杆臂 = `-chassis.pos` |
-| `TargetState` | `center, vel, yaw, w, radius, armor_num, armors_pos, armors_yaw` | 见 `GroundTruth` |
-| `GroundTruth` | `t, chassis, gimbal, target, target_inertial, visible_armor_id` | `target`=世界系表观（渲染/观测）；`target_inertial`=场地敌车（true_*/误差） |
-| `ArmorObservation` | 见下 | 混系，见 frames |
-| `TargetEstimate` | 见下 | 世界系（与 EKF 相同） |
+| `ChassisState` | `pos, vel, yaw, w` | odom |
+| `GimbalState` | `pos, vel, yaw, pitch, R_gimbal2world` | odom；`R` = gimbal→odom |
+| `TargetState` | `center, vel, yaw, w, radius, armor_num, armors_pos, armors_yaw` | odom（装甲由 robot 变来） |
+| `GroundTruth` | `t, chassis, gimbal, target, visible_armor_id` | odom 中间件 |
+| `ArmorObservation` | 见下 | 工作系 gimbal |
+| `TargetEstimate` | 见下 | gimbal |
+| `MetricsResult` | `err_*` / rms | gimbal；定义在 `types.hpp` |
 | `StampedObservation` | `obs, sim_t, frame` | SimNode → TrackerNode |
-| `TrackerOutput` | `est, sim_t` | TrackerNode → 可视化 |
+| `TrackerOutput` | `est, sim_t, metrics` | TrackerNode → 可视化 / HUD |
 | `SimulationConfig` | 见 YAML 映射 | — |
 
 `ArmorObservation`：
 
-- `xyz_in_gimbal`：相机系（`R_g2w^T * (armor - gimbal.pos)`，随 yaw 转）
-- `xyz_in_world`：世界系（原点=云台，轴向固定）
-- `ypd_in_world`：对 `xyz_in_world` 的 yaw/pitch/distance
-- `yaw_raw`：装甲板世界 yaw（rad）
+- `xyz_in_gimbal`：工作系（`R^T * (armor_odom - gimbal.pos)`）
+- `xyz_in_world`：装甲 odom（中间件，滤波/plot 不用）
+- `ypd_in_world`：对 `xyz_in_gimbal` 的 yaw/pitch/distance
+- `yaw_raw`：装甲 yaw 在 gimbal（rad）
 - `confidence, name, color, type, width, height`
+
+`common/frames.hpp`：`express_target_in_gimbal`、`point/vel/yaw_odom_to_gimbal`、`armor_in_robot`。
 
 `TargetEstimate`：
 
@@ -56,7 +59,7 @@ compute_aim_lead_point(est, flight_time) -> Vector3d
   // armor = center + (-r cos yaw, -r sin yaw, 0) + vel * T
 ```
 
-`MetricsResult`：误差 = Kalman − `gt.target_inertial`（场地敌车，不含云台公转）。
+`MetricsResult`：误差 = Kalman − `gt.target`（调用方须先把 target 变到 gimbal）。由 TrackerNode 更新，塞进 `TrackerOutput.metrics`。
 
 - 分量：`err_{x,y,z,vx,vy,vz,yaw,w,r}`
 - 范数：`pos_err_norm = |Δcenter|`，`vel_err_norm = |Δvel|`
@@ -83,7 +86,7 @@ ground_truth() const -> const GroundTruth&
 set_chassis_w / set_gimbal_offset / set_target_vel
 ```
 
-积分在辅助惯性系（配置里底盘初值在原点）。`ground_truth()` 已变到世界系（原点=云台，`gimbal.pos/vel=0`）。
+积分在 odom（底盘初值在原点）。`ground_truth()` 即 odom。`origin_acc()` 为云台原点惯性加速度。
 
 内部派生量：
 
@@ -92,9 +95,9 @@ r          = Rz(chassis.yaw) * gimbal_offset
 gimbal.pos = chassis.pos + r
 gimbal.vel = chassis.vel + ω × r
 gimbal.yaw = atan2(target.center - gimbal.pos)
-armor_i    = center + (-r cos θi, -r sin θi, 0)
+p_i_robot  = (-r cos(2π i/N), -r sin(...), 0)
+armor_i    = center + Rz(robot.yaw) * p_i_robot
 可见板     = 法向·(云台-装甲) 最大者
-然后整体减 gimbal.pos / gimbal.vel → 对外世界系
 ```
 
 ### `CameraSensor`（`camera_sensor.hpp`）
@@ -117,7 +120,7 @@ SimNode(SimulationConfig, Topics)
 start() / stop() / join() / finished() / frames_published()
 ```
 
-循环：先 `publish(0, 0)` → `step(dt)` → `publish(frame*dt, frame)`。`duration>0` 到点退出并 `obs_out.close()`。
+循环：先 `publish(0, 0)` → `step(dt)` → `publish(frame*dt, frame)`。`duration>0` 到点退出并 `obs_out.close()`。`publish` 同时发 gimbal 系 `obs_*`/`true_*`、`plot_tfs`、`my_robot.*`/`robot.armor` Marker。
 
 ## 3. `tracker/` — 滤波
 
@@ -167,13 +170,16 @@ update(z, H, R, z_subtract) / update(z, H, R, h, z_subtract)
 ### `TrackerNode`
 
 ```
-TrackerNode(unique_ptr<BaselineTracker>, Channel<StampedObservation>&, LatestSlot<TrackerOutput>&)
+TrackerNode(unique_ptr<BaselineTracker>, Channel<StampedObservation>&,
+            LatestSlot<TrackerOutput>&, LatestSlot<GroundTruth>&, bullet_speed=25)
 start() / stop() / join() / finished()
 ```
 
+每帧 `estimate()` 后 `express_target_in_gimbal` + `SimulationMetrics::update`，写 `TrackerOutput.metrics`，发 `kal_*`/`err_*` 与 Kalman Marker。
+
 ## 4. `app/` 接线
 
-`main` 创建四条话题、两个节点、一次 `RemoteLogger::init`。可视化循环读三槽齐备才渲染。
+`main` 创建四条话题、两个节点、一次 `RemoteLogger::init`。可视化循环读三槽齐备才 `plot_image`；**不** `plot` / `plot_markers` / `plot_tfs`。
 
 ```
 Channel<StampedObservation> obs_channel;
@@ -182,7 +188,7 @@ LatestSlot<StampedObservation> obs_slot;
 LatestSlot<TrackerOutput> est_slot;
 
 SimNode sim(cfg.sim, {obs_channel, gt_slot, obs_slot});
-TrackerNode tracker(make_unique<...>(...), obs_channel, est_slot);
+TrackerNode tracker(make_unique<...>(...), obs_channel, est_slot, gt_slot, bullet_speed);
 ```
 
 CLI：`sim_waggle [config.yaml]`，默认 `configs/sim_waggle.yaml`。
@@ -226,7 +232,7 @@ CameraDetectorRenderer(width=800, height=600, fov_deg=60)
 render(gt, est, obs, metrics) -> cv::Mat
 ```
 
-针孔、LED 灯条、检测框、EKF 重投影、AIM LEAD。图像经 `logger.plot_image(frame, {{"name","camera_detector"}})` 上报。
+针孔、LED 灯条、检测框、EKF 重投影、AIM LEAD。工作系 gimbal：`cam_pos=0`，敌车 `express_target_in_gimbal`。图像经 `logger.plot_image(frame, {{"name","camera_detector"}})` 上报。
 
 ## 7. OmniScope C++（只读使用）
 
