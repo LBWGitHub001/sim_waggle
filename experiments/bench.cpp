@@ -106,6 +106,7 @@ Result run_case(const Case & c, Variant variant) {
 
   auto obs0 = sensor.observe(kin.ground_truth());
   if (variant == FRAME) {
+    // ground_truth() 已是世界系（gimbal.pos ≡ 0）；此分支保持历史对照，加平移现为 no-op
     obs0.xyz_in_world += kin.ground_truth().gimbal.pos;
     obs0.ypd_in_world = tools::xyz2ypd(obs0.xyz_in_world);
   }

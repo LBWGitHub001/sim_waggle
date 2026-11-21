@@ -9,8 +9,7 @@ namespace sim
 
 /// 车载相机视觉感知传感器模拟器
 /// 取真值中当前可见装甲板，生成带高斯噪声的视觉观测 ArmorObservation。
-/// 注意：xyz_in_world 是"未补偿云台平移"的伪世界系坐标（与真实自瞄管线一致），
-/// 这是本仿真复现偏置伪速度的关键语义。
+/// xyz_in_world 在世界系（原点=云台中心，轴向固定）；xyz_in_gimbal 在相机系。
 class CameraSensor
 {
 public:

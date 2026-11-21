@@ -37,7 +37,7 @@ sim_waggle/
 ├── sim/                        # 【包 sim_node】仿真节点（编译期看不到 tracker 头文件）
 │   ├── CMakeLists.txt
 │   ├── kinematics.hpp/.cpp     # 运动学引擎：积分量(chassis/target)与派生量(gimbal/armor/可见性)分离
-│   ├── camera_sensor.hpp/.cpp  # 可见装甲板观测生成器（伪世界系坐标 + 平面高斯噪声）
+│   ├── camera_sensor.hpp/.cpp  # 可见装甲板观测生成器（世界系坐标 + 平面高斯噪声）
 │   └── sim_node.hpp/.cpp       # SimNode 线程：50Hz 发布观测 FIFO + 真值快照，确定性仿真时钟
 │
 ├── tracker/                    # 【包 tracker_node】追踪节点（编译期看不到 sim 头文件）
@@ -95,22 +95,21 @@ sim_waggle/
 ## 3. 3D Marker 与看板交互体系
 
 在浏览器访问 **`http://127.0.0.1:8080`** 进入 **Watch** 页面，将呈现 **2x2 工业看板**：
-1. **右上 3D 视口**：全交互式 **Three.js 3D 视口**，实时渲染包含 8 大命名空间的标准化 ROS 2 Markers：
+1. **右上 3D 视口**：全交互式 **Three.js 3D 视口**，实时渲染标准化 ROS 2 Markers。目标只画 **Kalman 状态**（不叠加真值；真值留在曲线 / HUD / 终端）：
    - `my_robot.chassis`（青色底盘球体 + 航向箭头指针 + 角速度标签）
    - `my_robot.gimbal`（黄色偏置杆臂 + 公转云台中心球体 + 瞄准朝向箭头）
-   - `ground_truth.target` & `ground_truth.armor`（真值目标中心、4 块空间装甲板长方体及轮辐）
    - `kalman.center` & `kalman.armor`（EKF 估计中心与拟合装甲板）
    - `kalman.vel`（**警示红橙色 3D 箭头**，随底盘旋转以 $\approx 1.2\,\text{m/s}$ 疯狂公转变向，直观暴露正弦伪速度）
    - `aim.lead`（金黄色弹道超前瞄准落点球体与火控射线）
 2. **左下相机视口**：实时的 **`camera_detector`** 车载相机检测图像（荧光蓝 LED 灯条、端点角点、绿框及随伪速度剧烈绕圈偏摆的黄色 `AIM LEAD` 准星）；
 3. **左上波形视口**：**由两个节点各自直接上报**（`omniscope::plot`，无 bridge 转发），
-   **所有坐标都在"云台中心"坐标系下**（原点 = 云台旋转中心，随云台平移、不随其旋转；
-   与观测 `xyz_in_world = armor_pos − gimbal.pos` 一致，底盘环绕中心不在其中）：
+   **世界系：原点绑定云台旋转中心（随云台平移），轴向固定不随云台旋转。**
+   底盘绕原点公转；观测 `xyz_in_world`、真值、Kalman 均在此系：
    - `SimNode::publish()`（[sim/sim_node.cpp](sim/sim_node.cpp)）上报
      - 观测：`obs_armor_x/y/z`（m）、`obs_armor_yaw_deg`（deg）、`obs_w_ego`（本车自转 rad/s）
      - 真值：装甲板 `true_armor_x/y/z`、`true_armor_yaw_deg`；目标中心 `true_center_x/y/z`、
        `true_vel_x/y/z`、`true_yaw_deg`、`true_w`；`true_w_ego`（本车自转真值）
    - `TrackerNode::run()`（[tracker/tracker_node.cpp](tracker/tracker_node.cpp)）上报
      - Kalman 状态：`kal_center_x/y/z`（m）、`kal_vel_x/y/z`（m/s）、`kal_yaw_deg`、`kal_w`、`kal_radius_mm`
-   - 估计误差仍在 `common::SimulationMetrics` 中计算，供相机 HUD 与终端日志使用（不单独发布曲线）
+   - 误差（Kalman − 真值）由 `app/main.cpp` 上报：`err_x/y/z`、`err_vx/y/z`、`err_yaw_deg`、`err_w`、`err_r_mm`、`err_pos`、`err_vel`
 4. **右下日志视口**：实时结构化日志控制台。

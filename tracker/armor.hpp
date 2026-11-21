@@ -60,8 +60,8 @@ struct Armor
   ArmorPriority priority = ArmorPriority::first;
   double confidence = 1.0;
 
-  Eigen::Vector3d xyz_in_gimbal = Eigen::Vector3d::Zero();  // 单位：m
-  Eigen::Vector3d xyz_in_world = Eigen::Vector3d::Zero();   // 单位：m
+  Eigen::Vector3d xyz_in_gimbal = Eigen::Vector3d::Zero();  // 相机系，单位：m
+  Eigen::Vector3d xyz_in_world = Eigen::Vector3d::Zero();   // 世界系（原点=云台，轴向固定），单位：m
   Eigen::Vector3d ypr_in_gimbal = Eigen::Vector3d::Zero();  // 单位：rad
   Eigen::Vector3d ypr_in_world = Eigen::Vector3d::Zero();   // 单位：rad
   Eigen::Vector3d ypd_in_world = Eigen::Vector3d::Zero();   // 球坐标系 (yaw, pitch, distance)

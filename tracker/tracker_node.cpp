@@ -49,7 +49,7 @@ void TrackerNode::run()
     est_out_.set(common::TrackerOutput{target, msg.sim_t});
 
     // ---------------- 遥测：Kalman 状态组（本节点直接发布）----------------
-    // 坐标系：云台中心（与观测 xyz_in_world 同一系）
+    // 世界系：原点=云台中心，轴向固定（与 xyz_in_world 同一系）
     if (target.x.size() >= 11) {
       omniscope::plot({
         {"kal_center_x", target.center.x()},        // 目标中心 x   (m)

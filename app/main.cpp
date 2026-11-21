@@ -146,13 +146,10 @@ void publish_3d_markers(
   std::vector<omniscope::Marker> markers;
   markers.reserve(20);
 
-  // 所有 marker 统一在"云台中心"坐标系下（原点 = 云台旋转中心），
-  // 与世界系只差一个平移 gt.gimbal.pos。原先 ground_truth.* 用世界系、
-  // kalman.* 用云台系，两者会差一个 gimbal_offset（≈5 cm），
-  // 看起来像估计误差 —— 现在统一后才是真实的估计偏差。
-  const Eigen::Vector3d & gimbal_pos = gt.gimbal.pos;
+  // 世界系：原点绑定云台中心，轴向固定。GT / Kalman 已在此系，直接落位。
+  // 3D 视口只画 Kalman 状态，不画真值；真值留在曲线 / HUD / 终端。
   const Eigen::Vector3d zero = Eigen::Vector3d::Zero();
-  const std::string frame = "gimbal";
+  const std::string frame = "world";
 
   // 1. 底盘 (my_robot.chassis)
   {
@@ -162,7 +159,7 @@ void publish_3d_markers(
     m.id = 0;
     m.type = omniscope::MarkerType::SPHERE;
     m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(gt.chassis.pos - gimbal_pos);
+    m.pose.position = to_vec3(gt.chassis.pos);
     m.scale = {0.16f, 0.16f, 0.16f};
     m.color = to_rgba(0.0f, 0.94f, 1.0f, 0.95f);
     markers.push_back(m);
@@ -174,7 +171,7 @@ void publish_3d_markers(
     m.id = 1;
     m.type = omniscope::MarkerType::ARROW;
     m.action = omniscope::MarkerAction::ADD;
-    const Eigen::Vector3d chassis = gt.chassis.pos - gimbal_pos;
+    const Eigen::Vector3d chassis = gt.chassis.pos;
     Eigen::Vector3d end_pt = chassis + Eigen::Vector3d(0.40 * std::cos(gt.chassis.yaw), 0.40 * std::sin(gt.chassis.yaw), 0.0);
     m.points = {to_vec3(chassis), to_vec3(end_pt)};
     m.scale = {0.035f, 0.07f, 0.07f};
@@ -189,7 +186,7 @@ void publish_3d_markers(
     m.id = 10;
     m.type = omniscope::MarkerType::LINE_LIST;
     m.action = omniscope::MarkerAction::ADD;
-    m.points = {to_vec3(gt.chassis.pos - gimbal_pos), to_vec3(zero)};
+    m.points = {to_vec3(gt.chassis.pos), to_vec3(zero)};
     m.scale = {0.015f, 0.0f, 0.0f};
     m.color = to_rgba(1.0f, 0.85f, 0.1f, 1.0f);
     markers.push_back(m);
@@ -219,50 +216,22 @@ void publish_3d_markers(
     m.color = to_rgba(1.0f, 0.95f, 0.2f, 1.0f);
     markers.push_back(m);
   }
-  // 3. 真实物理目标 (ground_truth)
+  // 3. 清掉 Host 里按 ns:id 常驻的旧真值 marker（停发不会自动消失）
   {
     omniscope::Marker m;
-    m.frame_id = frame;
     m.ns = "ground_truth.target";
-    m.id = 20;
-    m.type = omniscope::MarkerType::SPHERE;
-    m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(gt.target.center - gimbal_pos);
-    m.scale = {0.11f, 0.11f, 0.11f};
-    m.color = to_rgba(0.1f, 1.0f, 0.3f, 0.95f);
+    m.action = omniscope::MarkerAction::DELETEALL;
     markers.push_back(m);
-  }
-  std::vector<omniscope::Vector3> gt_spokes;
-  for (size_t i = 0; i < gt.target.armors_pos.size(); i++) {
-    omniscope::Marker m;
-    m.frame_id = frame;
-    m.ns = "ground_truth.armor";
-    m.id = static_cast<int32_t>(30 + i);
-    m.type = omniscope::MarkerType::CUBE;
-    m.action = omniscope::MarkerAction::ADD;
-    m.pose.position = to_vec3(gt.target.armors_pos[i] - gimbal_pos);
-    m.pose.orientation = eigen_quat_to_omni(armor_quat(gt.target.armors_yaw[i]));
-    m.scale = {static_cast<float>(ARMOR_THICKNESS), static_cast<float>(SMALL_ARMOR_WIDTH), static_cast<float>(LIGHTBAR_LENGTH)};
-    m.color = to_rgba(0.1f, 0.95f, 0.3f, 0.9f);
-    markers.push_back(m);
-
-    gt_spokes.push_back(to_vec3(gt.target.center - gimbal_pos));
-    gt_spokes.push_back(to_vec3(gt.target.armors_pos[i] - gimbal_pos));
   }
   {
     omniscope::Marker m;
-    m.frame_id = frame;
     m.ns = "ground_truth.armor";
-    m.id = 40;
-    m.type = omniscope::MarkerType::LINE_LIST;
-    m.action = omniscope::MarkerAction::ADD;
-    m.points = gt_spokes;
-    m.scale = {0.005f, 0.0f, 0.0f};
-    m.color = to_rgba(0.2f, 0.7f, 0.3f, 0.6f);
+    m.action = omniscope::MarkerAction::DELETEALL;
     markers.push_back(m);
   }
 
-  // 4. 自瞄 EKF 估计目标 (kalman)
+  // 4. 目标：Kalman 状态（中心 / 装甲 / 速度）—— 3D 视口的主内容
+  //    估计未成形（x 维数不足）时不画目标相关 marker。
   if (est.x.size() >= 11) {
     Eigen::Vector3d ekf_center(est.center.x(), est.center.y(), 0.0);
     Eigen::Vector3d ekf_vel(est.velocity.x(), est.velocity.y(), 0.0);
@@ -444,29 +413,44 @@ int main(int argc, char * argv[])
       auto metrics = metrics_evaluator.update(gt, est, cfg.sim.bullet_speed);
       auto aim_lead_pt = common::compute_aim_lead_point(est, metrics.flight_time);
 
-      // 发布：3D Markers + 相机检测图像
-      // （遥测曲线由 SimNode / TrackerNode 各自直接发布）
+      // 发布：3D Markers + 相机检测图像 + Kalman−真值误差曲线
       publish_3d_markers(gt, est, aim_lead_pt);
       cv::Mat frame = renderer.render(gt, est, obs_msg.obs, metrics);
       logger.plot_image(frame, {{"name", "camera_detector"}});
+
+      omniscope::plot({
+        {"err_x", metrics.err_x},
+        {"err_y", metrics.err_y},
+        {"err_z", metrics.err_z},
+      });
+      omniscope::plot({
+        {"err_vx", metrics.err_vx},
+        {"err_vy", metrics.err_vy},
+        {"err_vz", metrics.err_vz},
+        {"err_yaw_deg", metrics.err_yaw * 180.0 / M_PI},
+        {"err_w", metrics.err_w},
+        {"err_r_mm", metrics.err_r * 1000.0},
+        {"err_pos", metrics.pos_err_norm},
+        {"err_vel", metrics.vel_err_norm},
+      });
 
       // 周期性终端打印（含观测队列深度，>1 说明 tracker 消费跟不上）
       if (tick_start - last_log >= std::chrono::seconds(2)) {
         last_log = tick_start;
         logger.log(
           "INFO",
-          "t={:.1f}s | abs: pos_err={:.3f}m vel_err={:.3f}m/s | rel: pos_err={:.3f}m vel_err={:.3f}m/s"
-          " | rms(rel) p={:.3f}m v={:.3f}m/s | aim_bias={:.1f}cm nis={:.2f} obs_queue={}",
+          "t={:.1f}s | kal-true: pos={:.3f}m vel={:.3f}m/s yaw={:.2f}deg"
+          " | rms p={:.3f}m v={:.3f}m/s | aim_bias={:.1f}cm nis={:.2f} obs_queue={}",
           tout.sim_t, metrics.pos_err_norm, metrics.vel_err_norm,
-          metrics.rel_pos_err_norm, metrics.rel_vel_err_norm,
-          metrics.rmse_pos_rel, metrics.rmse_vel_rel,
+          metrics.err_yaw * 180.0 / M_PI,
+          metrics.rmse_pos, metrics.rmse_vel,
           metrics.aim_lead_bias * 100.0, est.last_nis, obs_channel.size());
         std::cout << fmt::format(
-          "[t={:5.1f}s] ABS pos/vel err: {:5.3f} m / {:5.3f} m/s | REL pos/vel err: {:5.3f} m / {:5.3f} m/s"
-          " | RMS(rel): {:5.3f} / {:5.3f} | Lead Bias: {:5.1f} cm | EKF w: {:5.2f} | Queue: {}\n",
+          "[t={:5.1f}s] kal-true pos/vel: {:5.3f} m / {:5.3f} m/s | yaw {:5.2f} deg"
+          " | RMS: {:5.3f} / {:5.3f} | Lead Bias: {:5.1f} cm | EKF w: {:5.2f} | Queue: {}\n",
           tout.sim_t, metrics.pos_err_norm, metrics.vel_err_norm,
-          metrics.rel_pos_err_norm, metrics.rel_vel_err_norm,
-          metrics.rmse_pos_rel, metrics.rmse_vel_rel,
+          metrics.err_yaw * 180.0 / M_PI,
+          metrics.rmse_pos, metrics.rmse_vel,
           metrics.aim_lead_bias * 100.0, est.w, obs_channel.size());
       }
     }
@@ -488,19 +472,17 @@ int main(int argc, char * argv[])
   const auto & m = metrics_evaluator.latest();
   if (m.samples > 0) {
     std::cout << fmt::format(
-      "\n===== estimation error summary ({} samples) =====\n"
-      "  ABS  pos: rms={:.3f} m  mean={:.3f} m  max={:.3f} m\n"
-      "  ABS  vel: rms={:.3f} m/s mean={:.3f} m/s max={:.3f} m/s\n"
-      "  REL  pos: rms={:.3f} m      (vs target-gimbal relativeness)\n"
-      "  REL  vel: rms={:.3f} m/s\n"
-      "  lead bias (vel_err * flight_time) = {:.2f} mm\n",
+      "\n===== kalman − truth ({} samples) =====\n"
+      "  pos: rms={:.3f} m  mean={:.3f} m  max={:.3f} m\n"
+      "  vel: rms={:.3f} m/s mean={:.3f} m/s max={:.3f} m/s\n"
+      "  aim |kal-true| = {:.2f} mm\n",
       m.samples,
       m.rmse_pos, m.mean_pos, m.max_pos,
       m.rmse_vel, m.mean_vel, m.max_vel,
-      m.rmse_pos_rel, m.rmse_vel_rel, m.aim_lead_bias * 1000.0);
+      m.aim_lead_bias * 1000.0);
     logger.log(
-      "INFO", "error summary: ABS pos rms={:.3f}m, ABS vel rms={:.3f}m/s, REL pos rms={:.3f}m, REL vel rms={:.3f}m/s",
-      m.rmse_pos, m.rmse_vel, m.rmse_pos_rel, m.rmse_vel_rel);
+      "INFO", "error summary: pos rms={:.3f}m, vel rms={:.3f}m/s, aim={:.2f}mm",
+      m.rmse_pos, m.rmse_vel, m.aim_lead_bias * 1000.0);
   }
 
   logger.log(

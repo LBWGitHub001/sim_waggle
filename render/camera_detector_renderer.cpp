@@ -146,12 +146,13 @@ void CameraDetectorRenderer::draw_hud(
   cv::putText(img, "TARGET: B1 (ENEMY) | STATUS: TRACKING (50Hz)", cv::Point(18, 48), cv::FONT_HERSHEY_SIMPLEX, 0.40, cv::Scalar(170, 185, 200), 1, cv::LINE_AA);
 
   // 顶部右侧
+  const double ghost_vel = gt.target.vel.head<2>().norm();
   std::string spin_str = fmt::format("CHASSIS W: {:4.1f} rad/s", gt.chassis.w);
   std::string offset_str = fmt::format("OFFSET: {:4.1f} cm", (gt.gimbal.pos - gt.chassis.pos).head<2>().norm() * 100.0);
-  std::string ghost_str = fmt::format("GHOST VEL: {:4.2f} m/s", metrics.vel_err_norm);
+  std::string ghost_str = fmt::format("GHOST VEL: {:4.2f} m/s", ghost_vel);
   std::string bias_str = fmt::format("LEAD BIAS: {:4.1f} cm", metrics.aim_lead_bias * 100.0);
 
-  cv::Scalar ghost_col = (metrics.vel_err_norm > 0.3) ? cv::Scalar(0, 140, 255) : cv::Scalar(0, 255, 128);
+  cv::Scalar ghost_col = (ghost_vel > 0.3) ? cv::Scalar(0, 140, 255) : cv::Scalar(0, 255, 128);
   cv::Scalar bias_col = (metrics.aim_lead_bias > 0.08) ? cv::Scalar(40, 40, 255) : cv::Scalar(0, 255, 128);
 
   cv::putText(img, spin_str, cv::Point(w_ - 320, 24), cv::FONT_HERSHEY_SIMPLEX, 0.42, cv::Scalar(200, 215, 230), 1, cv::LINE_AA);

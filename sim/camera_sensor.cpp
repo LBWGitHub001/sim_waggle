@@ -36,14 +36,13 @@ common::ArmorObservation CameraSensor::observe(const common::GroundTruth & gt)
   const auto & armor_pos = gt.target.armors_pos[gt.visible_armor_id];
   const double armor_yaw = gt.target.armors_yaw[gt.visible_armor_id];
 
-  // 1. 云台指向装甲板的相对矢量（世界系）
+  // 1. 世界系：原点=云台中心，故 armor_pos 已是云台→装甲矢量
   const Eigen::Vector3d r_g2a = armor_pos - gt.gimbal.pos;
 
-  // 2. 云台系坐标（相机原始测量）
+  // 2. 相机系（随云台 yaw 旋转）
   obs.xyz_in_gimbal = gt.gimbal.R_gimbal2world.transpose() * r_g2a;
 
-  // 3. "伪世界系"坐标：等价于真实自瞄管线 R_gimbal2world * xyz_in_gimbal 的输出，
-  //    即只做了旋转变换、未补偿云台自身平移 —— 这正是本仿真要复现的偏置误差来源
+  // 3. 世界系坐标（轴向固定，不做 yaw 旋转）
   obs.xyz_in_world = r_g2a;
 
   // 4. 观测高斯白噪声（平面假设：z 向故意不加噪，恒为 0）

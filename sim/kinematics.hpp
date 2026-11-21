@@ -10,6 +10,9 @@ namespace sim
 /// 模拟自车底盘平移、小陀螺自转与偏置公转云台；
 /// 模拟敌车目标平移与多装甲板旋转。
 ///
+/// 积分在辅助惯性系中进行（初值：底盘中心在原点，目标在 target_init_pos）。
+/// 对外 ground_truth() 已变换到世界系：原点 = 云台中心，轴向固定不转。
+///
 /// 内部状态分两类，方便调试时区分：
 /// - 积分量：底盘 pos/yaw、目标 center/yaw（只在 integrate_* 中随时间累积）
 /// - 派生量：云台位姿/速度、装甲板位姿、可见装甲板（update_derived() 纯推导，
@@ -25,8 +28,8 @@ public:
   // 动力学推演步进 dt 秒
   void step(double dt);
 
-  // 获取当前物理真值
-  const common::GroundTruth & ground_truth() const { return gt_; }
+  // 当前物理真值（世界系：原点绑定云台，轴向固定）
+  const common::GroundTruth & ground_truth() const { return world_; }
 
   // 动态修改参数（调试时用）
   void set_chassis_w(double w) { cfg_.chassis_w = w; }
@@ -38,11 +41,13 @@ private:
   void integrate_target(double dt);   // 目标平移 + 自转积分
   void update_derived();              // 由积分量推导全部派生量
   void update_gimbal();               // 云台位置 / 公转线速度 / 瞄准朝向
-  void update_armors();               // 目标各装甲板世界位姿
+  void update_armors();               // 目标各装甲板位姿
   void select_visible_armor();        // 法向最朝向云台的装甲板
+  void express_in_world_frame();      // 辅助惯性系 → 世界系（原点=云台）
 
   common::SimulationConfig cfg_;
-  common::GroundTruth gt_;
+  common::GroundTruth gt_;     // 辅助惯性系，仅用于积分
+  common::GroundTruth world_;  // 对外世界系
 };
 
 }  // namespace sim

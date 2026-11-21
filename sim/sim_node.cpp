@@ -65,16 +65,12 @@ void SimNode::publish(double sim_t, uint64_t frame)
   topics_.obs_out.push(std::move(msg));
 
   // ---------------- 遥测：观测组 + 真值组（本节点直接发布）----------------
-  // 坐标系：云台中心（原点 = 云台旋转中心，随云台平移、不随其旋转），
-  // 与观测 xyz_in_world = armor_pos - gimbal.pos 的定义一致。
-  const Eigen::Vector3d & gimbal_pos = gt.gimbal.pos;
-  const Eigen::Vector3d & gimbal_vel = gt.gimbal.vel;
-
+  // 世界系：原点 = 云台中心，轴向固定。真值已在此系，不再减 gimbal.pos。
   Eigen::Vector3d true_armor = Eigen::Vector3d::Zero();
   double true_armor_yaw = 0.0;
   const int visible_id = gt.visible_armor_id;
   if (visible_id >= 0 && visible_id < static_cast<int>(gt.target.armors_pos.size())) {
-    true_armor = gt.target.armors_pos[visible_id] - gimbal_pos;
+    true_armor = gt.target.armors_pos[visible_id];
     true_armor_yaw = gt.target.armors_yaw[visible_id];
   }
 
@@ -85,9 +81,9 @@ void SimNode::publish(double sim_t, uint64_t frame)
     {"obs_armor_z", obs.xyz_in_world.z()},  // 可见装甲板 z (m)
   });
   omniscope::plot({
-    {"true_center_x", gt.target.center.x() - gimbal_pos.x()}, // 目标中心 x   (m)
-    {"true_center_y", gt.target.center.y() - gimbal_pos.y()}, // 目标中心 y   (m)
-    {"true_center_z", gt.target.center.z() - gimbal_pos.z()}, // 目标中心 z   (m)
+    {"true_center_x", gt.target.center.x()}, // 目标中心 x   (m)
+    {"true_center_y", gt.target.center.y()}, // 目标中心 y   (m)
+    {"true_center_z", gt.target.center.z()}, // 目标中心 z   (m)
   });
 
   // 其余量（角度/角速度/线速度/装甲板真值）后发 → 侧栏按需勾选
@@ -98,9 +94,9 @@ void SimNode::publish(double sim_t, uint64_t frame)
     {"true_armor_y", true_armor.y()},                         // 可见装甲板 y (m)
     {"true_armor_z", true_armor.z()},                         // 可见装甲板 z (m)
     {"true_armor_yaw_deg", true_armor_yaw * 180.0 / M_PI},    // 装甲板 yaw   (deg)
-    {"true_vel_x", gt.target.vel.x() - gimbal_vel.x()},       // 目标速度 x   (m/s)
-    {"true_vel_y", gt.target.vel.y() - gimbal_vel.y()},       // 目标速度 y   (m/s)
-    {"true_vel_z", gt.target.vel.z() - gimbal_vel.z()},       // 目标速度 z   (m/s)
+    {"true_vel_x", gt.target.vel.x()},                       // 目标速度 x   (m/s)
+    {"true_vel_y", gt.target.vel.y()},                       // 目标速度 y   (m/s)
+    {"true_vel_z", gt.target.vel.z()},                       // 目标速度 z   (m/s)
     {"true_yaw_deg", gt.target.yaw * 180.0 / M_PI},           // 目标朝向 yaw (deg)
     {"true_w", gt.target.w},                                  // 目标自转 w   (rad/s)
     {"true_w_ego", gt.chassis.w},                             // 本车自转真值 (rad/s)

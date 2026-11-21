@@ -79,11 +79,12 @@ void KinematicsEngine::update_derived()
   update_gimbal();
   update_armors();
   select_visible_armor();
+  express_in_world_frame();
 }
 
 void KinematicsEngine::update_gimbal()
 {
-  // 偏置杆臂的世界系矢量；云台线速度 = 底盘平移 + 杆臂公转 ω × r
+  // 辅助惯性系：偏置杆臂；云台线速度 = 底盘平移 + 杆臂公转 ω × r
   const Eigen::Vector3d r_world = rot_z(gt_.chassis.yaw) * cfg_.gimbal_offset;
   gt_.gimbal.pos = gt_.chassis.pos + r_world;
   gt_.gimbal.vel = gt_.chassis.vel + Eigen::Vector3d(0.0, 0.0, gt_.chassis.w).cross(r_world);
@@ -123,6 +124,24 @@ void KinematicsEngine::select_visible_armor()
     }
   }
   gt_.visible_armor_id = best_id;
+}
+
+void KinematicsEngine::express_in_world_frame()
+{
+  // 世界系：原点绑在云台中心，轴向与辅助惯性系平行（不旋转）。
+  const Eigen::Vector3d origin = gt_.gimbal.pos;
+  const Eigen::Vector3d v_origin = gt_.gimbal.vel;
+
+  world_ = gt_;
+  world_.chassis.pos -= origin;
+  world_.chassis.vel -= v_origin;
+  world_.gimbal.pos = Eigen::Vector3d::Zero();
+  world_.gimbal.vel = Eigen::Vector3d::Zero();
+  world_.target.center -= origin;
+  world_.target.vel -= v_origin;
+  for (auto & p : world_.target.armors_pos) {
+    p -= origin;
+  }
 }
 
 }  // namespace sim

@@ -9,6 +9,14 @@
 namespace common
 {
 
+// =============================================================================
+// 世界系定义（全工程唯一）
+//   原点：绑定正在旋转的云台旋转中心（随云台平移）
+//   轴向：与惯性系平行，不随云台旋转
+// GroundTruth、xyz_in_world、EKF 状态、3D Marker、遥测曲线均在此系。
+// 因此 gimbal.pos ≡ 0、gimbal.vel ≡ 0；底盘绕原点公转，杆臂 = -chassis.pos。
+// =============================================================================
+
 // 1. 本车底盘状态
 struct ChassisState
 {
@@ -18,8 +26,8 @@ struct ChassisState
   double w = 0.0; // 自转角速度 (rad/s)
 };
 
-// 2. 本车公转云台状态
-// 注：云台相对底盘的偏置由配置给出，实际杆臂矢量 = gimbal.pos - chassis.pos
+// 2. 本车云台状态（世界原点即云台中心，pos/vel 恒为 0）
+// 杆臂（云台相对底盘）= -chassis.pos
 struct GimbalState
 {
   Eigen::Vector3d pos = Eigen::Vector3d::Zero();
@@ -58,8 +66,8 @@ struct GroundTruth
 // 5. 传感器产生的装甲板视觉测量 (Observation)
 struct ArmorObservation
 {
-  Eigen::Vector3d xyz_in_gimbal = Eigen::Vector3d::Zero();
-  Eigen::Vector3d xyz_in_world = Eigen::Vector3d::Zero();
+  Eigen::Vector3d xyz_in_gimbal = Eigen::Vector3d::Zero(); // 相机系（随云台 yaw 转）
+  Eigen::Vector3d xyz_in_world = Eigen::Vector3d::Zero();  // 世界系（原点=云台，轴向固定）
   Eigen::Vector3d ypd_in_world = Eigen::Vector3d::Zero(); // yaw, pitch, distance
   double yaw_raw = 0.0;
   double confidence = 0.98;
@@ -70,7 +78,7 @@ struct ArmorObservation
   double height = 0.056;
 };
 
-// 6. 算法给出的目标状态估计 (TargetEstimate)
+// 6. 算法给出的目标状态估计 (TargetEstimate)，世界系
 struct TargetEstimate
 {
   Eigen::VectorXd x; // 11 维状态向量 [xc, vx, yc, vy, zc, vz, yaw, w, r, ...]
