@@ -12,7 +12,7 @@
 
 不要：在 `main` 上直接改 EKF 模型；从脏工作区切分支；把失败实验 squash 进 main。
 
-**每一步都 `git commit`。** 开分支、加 tracker、接线、扩消息、改节点——每做完一件立刻提交，不要攒。多分支并行时每个分支各自提交。`git push` 等用户明确要求。
+**每一步都 `git commit`，然后立刻 `git push`。** 开分支、加 tracker、接线、扩消息、改节点——每做完一件立刻提交并推送，不要攒。多分支并行时每个分支各自 commit + push。改 OmniScope 子模块时：子模块先 commit/push，再提交本仓库的 submodule 指针并 push。
 
 ## 新建实验
 
