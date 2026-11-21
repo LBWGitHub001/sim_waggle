@@ -2,8 +2,9 @@
 name: sim-waggle-interfaces
 description: >-
   Documents sim_waggle package interfaces, concrete tracker types, message types,
-  coordinate frames, OmniScope telemetry keys, and the main-as-base / algorithm-branch
-  workflow. Use when adding a tracker algorithm, branching from main, changing
+  coordinate frames, OmniScope telemetry keys, the main-as-base / algorithm-branch
+  workflow, and the rule that every step is git-committed. Use when adding a tracker
+  algorithm, branching from main, changing
   SimNode/TrackerNode, YAML config, plot keys, 3D markers, metrics, common types,
   or wiring app/main.cpp.
 ---
@@ -13,6 +14,15 @@ description: >-
 注意主分支是一个总体的基，其他的算法尝试都是基于main的一系列分支。
 
 `main` 是稳定仿真平台（物理、观测、通道、可视化、基线 EKF）。任何新算法都从 `main` 开分支，在分支上换成该分支自己的具体 tracker 类；不要虚基类、不要继承多态；不要把未验证算法合回 `main`。
+
+## Git：每一步都提交
+
+在本仓库做任何改动时，**每完成一个独立步骤立刻 `git commit`**。不要攒到最后一次性交，不要等用户再说「提交」。
+
+- 一步 = 一组语义完整、尽量可编译的改动（例如删掉 `ITracker`、改世界系、注入控制量）
+- 同时改 `main` 和其他算法分支时，**每个分支各自提交**
+- 提交信息写 why，1–2 句；不要空提交；不要 `--amend` 已经推过的提交
+- `git push` 仅在用户明确要求时
 
 ## 先读哪份
 
@@ -113,6 +123,7 @@ main 上的实现是 `tracker::BaselineTracker`，忠实还原 auto_aim，**不�
 
 ## 硬约束
 
+- 每完成一步就 `git commit`（见上文「Git：每一步都提交」）
 - 不改世界系定义（原点=云台中心，轴向固定）
 - 不让 `sim/` 看见 `tracker/`，反之亦然
 - 不改 OmniScope 源码
