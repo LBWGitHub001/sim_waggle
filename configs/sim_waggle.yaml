@@ -23,8 +23,9 @@ measurement:
   noise_yaw_std: 0.01             # 观测装甲板角噪声标准差 (rad)
 
 ekf:
-  q_xyz_acc_var: 100.0            # 位置/速度加速度方差 (原版 auto_aim 参数)
+  q_xyz_acc_var: 100.0            # 未建模 z 加速度方差
   q_yaw_acc_var: 75.0             # 角加速度方差
+  q_u_acc_var: 1.0                # 控制量 ax,ay 噪声 (m/s^2)^2，Q += B Qu Bᵀ
   r_yaw: 0.04                     # yaw 观测噪声
   r_pitch: 0.04                   # pitch 观测噪声
   r_dist_base: 0.015              # 距离观测噪声基础值

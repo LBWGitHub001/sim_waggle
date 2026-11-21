@@ -149,12 +149,12 @@ set_control(ego_acc)   // gimbal xy，z 忽略
 predict(dt)            // 内部 Target::predict(dt, u_)
 ```
 
-`u = (-a_x, -a_y, 0)`，`a` 为云台原点有限差分加速度。过程模型只在 x/y 上加 `0.5 dt^2 a` 与 `dt a`。
+`u = (û_x, û_y)`，`û = (-a_x, -a_y)`。过程模型 `x = Fx + Bu`，`B` 为 11×2（`½dt²/dt` 进 xc/vx 与 yc/vy）。协方差 `P = FPFᵀ + B Qu Bᵀ + Q_{z,ψ}`，`Qu = q_u_acc_var I₂`。xy 不再用原来的 `q_xyz_acc_var`（那是未知加速度；现在未知量在 `u` 上）。
 
 ### `auto_aim::Target` / `EkfParams`
 
 ```
-EkfParams { q_xyz_acc_var=100, q_yaw_acc_var=75, r_yaw=0.04, r_pitch=0.04, r_dist_base=0.015 }
+EkfParams { q_xyz_acc_var=100, q_yaw_acc_var=75, q_u_acc_var=1, r_yaw=0.04, r_pitch=0.04, r_dist_base=0.015 }
 Target(armor, t, radius, armor_num, P0_dig, ekf_params)
 predict(dt) / predict(dt, acc) / update(armor)
 ekf_x() / ekf() / armor_xyza_list() / diverged()
@@ -229,7 +229,8 @@ Host：`thirdparty/OmniScope/host/start.sh`，门户 `http://127.0.0.1:8080`。
 | `measurement.enable_noise` | | true |
 | `measurement.noise_pos_std` | m | 0.005 |
 | `measurement.noise_yaw_std` | rad | 0.01 |
-| `ekf.q_xyz_acc_var / q_yaw_acc_var` | | 100 / 75 |
+| `ekf.q_xyz_acc_var / q_yaw_acc_var` | z / yaw 未建模加速度 | 100 / 75 |
+| `ekf.q_u_acc_var` | 控制量 ax,ay 噪声，经 B 进 Q | 1.0 |
 | `ekf.r_yaw / r_pitch / r_dist_base` | | 0.04 / 0.04 / 0.015 |
 | `ekf.p0` | 11 维对角 | `1,64,1,64,1,64,0.4,400,1e-5,1,1` |
 | `remote_logger.*` | `omniscope::RemoteLogger::Config` | 见 yaml |

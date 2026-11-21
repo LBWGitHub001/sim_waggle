@@ -95,36 +95,37 @@ void Target::predict(double dt, const Eigen::Vector3d & acc)
   };
   // clang-format on
 
-  // Piecewise White Noise Model
+  // B：只把 xy 加速度映射进 [xc,vx,yc,vy]。u ~ N(û, Qu)
+  const double dt2 = 0.5 * dt * dt;
+  Eigen::MatrixXd B = Eigen::MatrixXd::Zero(11, 2);
+  B(0, 0) = dt2;
+  B(1, 0) = dt;
+  B(2, 1) = dt2;
+  B(3, 1) = dt;
+  const Eigen::Vector2d u(acc.x(), acc.y());
+
+  // z / yaw 仍用分段白噪声；xy 的未知加速度改由 B Qu Bᵀ 承担
   double v1 = ekf_params_.q_xyz_acc_var;
   double v2 = ekf_params_.q_yaw_acc_var;
+  double vu = ekf_params_.q_u_acc_var;
   auto a = dt * dt * dt * dt / 4;
   auto b = dt * dt * dt / 2;
   auto c = dt * dt;
 
-  // clang-format off
-  Eigen::MatrixXd Q{
-    {a * v1, b * v1,      0,      0,      0,      0,      0,      0, 0, 0, 0},
-    {b * v1, c * v1,      0,      0,      0,      0,      0,      0, 0, 0, 0},
-    {     0,      0, a * v1, b * v1,      0,      0,      0,      0, 0, 0, 0},
-    {     0,      0, b * v1, c * v1,      0,      0,      0,      0, 0, 0, 0},
-    {     0,      0,      0,      0, a * v1, b * v1,      0,      0, 0, 0, 0},
-    {     0,      0,      0,      0, b * v1, c * v1,      0,      0, 0, 0, 0},
-    {     0,      0,      0,      0,      0,      0, a * v2, b * v2, 0, 0, 0},
-    {     0,      0,      0,      0,      0,      0, b * v2, c * v2, 0, 0, 0},
-    {     0,      0,      0,      0,      0,      0,      0,      0, 0, 0, 0},
-    {     0,      0,      0,      0,      0,      0,      0,      0, 0, 0, 0},
-    {     0,      0,      0,      0,      0,      0,      0,      0, 0, 0, 0}
-  };
-  // clang-format on
+  Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(11, 11);
+  Q(4, 4) = a * v1;
+  Q(4, 5) = b * v1;
+  Q(5, 4) = b * v1;
+  Q(5, 5) = c * v1;
+  Q(6, 6) = a * v2;
+  Q(6, 7) = b * v2;
+  Q(7, 6) = b * v2;
+  Q(7, 7) = c * v2;
+  Eigen::Matrix2d Qu = Eigen::Matrix2d::Identity() * vu;
+  Q += B * Qu * B.transpose();
 
-  const double dt2 = 0.5 * dt * dt;
   auto f = [&](const Eigen::VectorXd & x) -> Eigen::VectorXd {
-    Eigen::VectorXd x_prior = F * x;
-    x_prior[0] += dt2 * acc.x();
-    x_prior[1] += dt * acc.x();
-    x_prior[2] += dt2 * acc.y();
-    x_prior[3] += dt * acc.y();
+    Eigen::VectorXd x_prior = F * x + B * u;
     x_prior[6] = tools::limit_rad(x_prior[6]);
     return x_prior;
   };

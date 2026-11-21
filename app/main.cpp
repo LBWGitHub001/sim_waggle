@@ -74,6 +74,7 @@ AppConfig load_config(const std::string & path)
     auto ekf_n = yaml["ekf"];
     cfg.ekf.q_xyz_acc_var = ekf_n["q_xyz_acc_var"].as<double>(100.0);
     cfg.ekf.q_yaw_acc_var = ekf_n["q_yaw_acc_var"].as<double>(75.0);
+    cfg.ekf.q_u_acc_var = ekf_n["q_u_acc_var"].as<double>(1.0);
     cfg.ekf.r_yaw = ekf_n["r_yaw"].as<double>(0.04);
     cfg.ekf.r_pitch = ekf_n["r_pitch"].as<double>(0.04);
     cfg.ekf.r_dist_base = ekf_n["r_dist_base"].as<double>(0.015);
