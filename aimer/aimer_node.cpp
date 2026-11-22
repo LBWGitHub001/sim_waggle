@@ -96,15 +96,8 @@ void AimerNode::run()
 
     if (cmd_est.valid) {
       omniscope::plot({
-        {"cmd_target_yaw_deg", cmd_est.target_yaw * 180.0 / M_PI},
-        {"cmd_target_pitch_deg", cmd_est.target_pitch * 180.0 / M_PI},
         {"cmd_yaw_deg", cmd_est.yaw * 180.0 / M_PI},
         {"cmd_pitch_deg", cmd_est.pitch * 180.0 / M_PI},
-        {"cmd_yaw_vel", cmd_est.yaw_vel},
-        {"cmd_yaw_acc", cmd_est.yaw_acc},
-        {"cmd_pitch_vel", cmd_est.pitch_vel},
-        {"cmd_pitch_acc", cmd_est.pitch_acc},
-        {"cmd_fly_time", cmd_est.fly_time},
       }, msg.stamp_ns);
       publish_aim_markers(cmd_est.aim_xyz, msg.stamp_ns);
     }
@@ -113,9 +106,6 @@ void AimerNode::run()
     if (gt_in_.get(gt)) {
       const common::TargetEstimate gt_est = common::estimate_from_ground_truth(gt);
       const common::GimbalCommand cmd_true = cmd_from_state(aimer_gt_, gt_est);
-      omniscope::plot({
-        {"true_camera_yaw_deg", gt.camera.yaw * 180.0 / M_PI},
-      }, msg.stamp_ns);
       if (cmd_true.valid) {
         omniscope::plot({
           {"true_aim_yaw_deg", cmd_true.yaw * 180.0 / M_PI},
