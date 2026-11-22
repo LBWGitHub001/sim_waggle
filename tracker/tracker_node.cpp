@@ -57,12 +57,15 @@ TrackerNode::TrackerNode(
   common::Channel<common::StampedObservation> & obs_in,
   common::LatestSlot<common::TrackerOutput> & est_out,
   common::LatestSlot<common::GroundTruth> & gt_in,
-  double bullet_speed)
+  double bullet_speed,
+  common::AimerParams aimer,
+  common::PlannerParams planner)
 : tracker_(std::move(tracker)),
   obs_in_(obs_in),
   est_out_(est_out),
   gt_in_(gt_in),
-  bullet_speed_(bullet_speed)
+  bullet_speed_(bullet_speed),
+  planner_(aimer, planner)
 {
 }
 
@@ -198,17 +201,26 @@ void TrackerNode::run()
     auto target = tracker_->estimate();
 
     common::GroundTruth gt;
-    if (gt_in_.get(gt) && target.x.size() >= 11) {
+    common::TargetState enemy_g;
+    bool have_gt = gt_in_.get(gt);
+    if (have_gt && target.x.size() >= 11) {
       common::GroundTruth gt_g = gt;
       gt_g.target = common::express_target_in_gimbal(gt);
+      enemy_g = gt_g.target;
       metrics_.update(gt_g, target, bullet_speed_);
     }
     const common::MetricsResult & metrics = metrics_.latest();
+
+    common::GimbalCommand cmd;
+    if (target.x.size() >= 11) {
+      cmd = planner_.plan(target, bullet_speed_);
+    }
 
     common::TrackerOutput out;
     out.est = target;
     out.sim_t = msg.sim_t;
     out.metrics = metrics;
+    out.cmd = cmd;
     est_out_.set(out);
 
     if (target.x.size() >= 11) {
@@ -222,7 +234,15 @@ void TrackerNode::run()
         {"kal_yaw_deg", target.yaw * 180.0 / M_PI},
         {"kal_w", target.w},
         {"kal_radius_mm", target.radius * 1000.0},
+        {"kal_l_mm", target.l * 1000.0},
+        {"kal_h_mm", target.h * 1000.0},
       });
+      if (have_gt) {
+        omniscope::plot({
+          {"true_l_mm", enemy_g.l * 1000.0},
+          {"true_h_mm", enemy_g.h * 1000.0},
+        });
+      }
       omniscope::plot({
         {"err_x", metrics.err_x},
         {"err_y", metrics.err_y},
@@ -235,11 +255,40 @@ void TrackerNode::run()
         {"err_yaw_deg", metrics.err_yaw * 180.0 / M_PI},
         {"err_w", metrics.err_w},
         {"err_r_mm", metrics.err_r * 1000.0},
+        {"err_l_mm", metrics.err_l * 1000.0},
+        {"err_h_mm", metrics.err_h * 1000.0},
         {"err_pos", metrics.pos_err_norm},
         {"err_vel", metrics.vel_err_norm},
       });
 
-      const Eigen::Vector3d aim = common::compute_aim_lead_point(target, metrics.flight_time);
+      if (cmd.valid) {
+        omniscope::plot({
+          {"cmd_target_yaw_deg", cmd.target_yaw * 180.0 / M_PI},
+          {"cmd_target_pitch_deg", cmd.target_pitch * 180.0 / M_PI},
+          {"cmd_yaw_deg", cmd.yaw * 180.0 / M_PI},
+          {"cmd_pitch_deg", cmd.pitch * 180.0 / M_PI},
+          {"cmd_yaw_vel", cmd.yaw_vel},
+          {"cmd_yaw_acc", cmd.yaw_acc},
+          {"cmd_pitch_vel", cmd.pitch_vel},
+          {"cmd_pitch_acc", cmd.pitch_acc},
+          {"cmd_fly_time", cmd.fly_time},
+        });
+      }
+      if (have_gt) {
+        double true_aim_yaw = 0.0;
+        if (gt.visible_armor_id >= 0 &&
+            gt.visible_armor_id < static_cast<int>(enemy_g.armors_pos.size())) {
+          const Eigen::Vector3d & p = enemy_g.armors_pos[static_cast<size_t>(gt.visible_armor_id)];
+          true_aim_yaw = std::atan2(p.y(), p.x());
+        }
+        omniscope::plot({
+          {"true_camera_yaw_deg", gt.camera.yaw * 180.0 / M_PI},
+          {"true_aim_yaw_deg", true_aim_yaw * 180.0 / M_PI},
+        });
+      }
+
+      const Eigen::Vector3d aim =
+        cmd.valid ? cmd.aim_xyz : common::compute_aim_lead_point(target, metrics.flight_time);
       publish_kalman_markers(target, aim);
     }
   }

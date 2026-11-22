@@ -41,6 +41,8 @@ TargetEstimate truth_as_estimate(const TargetState & t)
   e.velocity = t.vel;
   e.yaw = t.yaw;
   e.radius = t.radius;
+  e.l = t.l;
+  e.h = t.h;
   return e;
 }
 
@@ -78,6 +80,8 @@ MetricsResult SimulationMetrics::update(
   r.err_yaw = normalize_angle(est.yaw - truth.yaw);
   r.err_w = est.w - truth.w;
   r.err_r = est.radius - truth.radius;
+  r.err_l = est.l - truth.l;
+  r.err_h = est.h - truth.h;
 
   r.pos_err_norm = (est.center - truth.center).norm();
   r.vel_err_norm = (est.velocity - truth.vel).norm();

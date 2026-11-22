@@ -116,17 +116,20 @@ tracker::TrackerNode tracker_node(
 
 ## YAML（`configs/sim_waggle.yaml`）
 
-`app/main.cpp::load_config()` 一处解析。节：`simulation` / `my_robot` / `target_robot` / `measurement` / `ekf` / `remote_logger`。字段表见 [interfaces.md](interfaces.md)。
+`app/main.cpp::load_config()` 一处解析。节：`simulation` / `my_robot` / `target_robot` / `measurement` / `aimer` / `planner` / `ekf` / `remote_logger`。字段表见 [interfaces.md](interfaces.md)。
 
 ## 基线状态（`auto_aim::Target`，11 维）
 
 `x = [xc, vx, yc, vy, zc, vz, yaw, w, r, l, h]`
 
 - CV + 常角速度；观测 4 维 YPDA `[yaw, pitch, dist, armor_yaw]`
-- `l=r2-r1`，`h=z2-z1`（四装甲奇偶板）
+- `l=r2-r1`，`h=z2-z1`（四装甲奇偶板：对侧同 r/z，邻侧 `r+l` / `zc+h`）
 - 过程噪声 `EkfParams`；约瑟夫形式协方差（`tools::ExtendedKalmanFilter`）
+- 仿真 `armor_in_robot(i,n,r,l,h)` 必须与 `h_armor_xyz` 同一套几何，否则 \(l,h\) 不可观测
 
-main 上的实现是 `tracker::BaselineTracker`，忠实还原 auto_aim，**不要在 main 上改它的模型**。补偿算法另写类。
+火控是平台能力（main）：`common::Aimer` 出无约束射击角，`common::Planner`（TinyMPC）出可行 `cmd.yaw/pitch`。不做开火判定，不驱动仿真 camera。
+
+main 上的滤波实现是 `tracker::BaselineTracker`，忠实还原 auto_aim，**不要在 main 上改它的模型**。补偿算法另写类。
 
 ## 硬约束
 
@@ -138,4 +141,4 @@ main 上的实现是 `tracker::BaselineTracker`，忠实还原 auto_aim，**不�
 - 不把实验合进 `main`，除非明确要求提升为新基线
 - 可视化线程只读 LatestSlot，不碰节点内部状态
 - 不引入虚函数 / 继承多态切换算法（每个分支一个具体 tracker 类型）
-- `aim.lead` 用 `common::compute_aim_lead_point(est, flight_time)`，不要跨线程调 tracker 的 `predict_aim_point`
+- `aim.lead` 优先 `TrackerOutput.cmd.aim_xyz`（弹道提前点）；命令无效时才回退 `compute_aim_lead_point`。不要跨线程调 tracker 的 `predict_aim_point`

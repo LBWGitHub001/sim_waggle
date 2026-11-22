@@ -236,7 +236,8 @@ cv::Mat CameraDetectorRenderer::render(
 
   for (size_t i = 0; i < enemy.armors_pos.size(); i++) {
     double yaw_i = enemy.armors_yaw[i];
-    Eigen::Vector3d p_armor(enemy.armors_pos[i].x(), enemy.armors_pos[i].y(), cam_height_);
+    Eigen::Vector3d p_armor = enemy.armors_pos[i];
+    p_armor.z() += cam_height_;
 
     Eigen::Vector3d n_a(-std::cos(yaw_i) * cp, -std::sin(yaw_i) * cp, sp);
     Eigen::Vector3d u_r(-std::sin(yaw_i), std::cos(yaw_i), 0.0);
@@ -327,16 +328,14 @@ cv::Mat CameraDetectorRenderer::render(
 
   // 5. 自瞄跟踪器 EKF 重投影（EKF 在 gimbal，旋到 camera）
   if (est.x.size() >= 11) {
-    const Eigen::Vector3d ekf_center_c = common::point_gimbal_to_camera(
-      Eigen::Vector3d(est.center.x(), est.center.y(), 0.0), gt.camera);
-    const double yaw_c = common::wrap_pi(est.yaw - gt.camera.yaw);
     const Eigen::Vector3d ekf_vel_c = common::point_gimbal_to_camera(est.velocity, gt.camera);
-    Eigen::Vector3d ekf_center_3d(ekf_center_c.x(), ekf_center_c.y(), cam_height_);
-    Eigen::Vector3d ekf_armor_3d = ekf_center_3d + Eigen::Vector3d(
-      -est.radius * std::cos(yaw_c),
-      -est.radius * std::sin(yaw_c),
-      0.0
-    );
+    Eigen::Vector3d armor_g = est.center + Eigen::Vector3d(
+      -est.radius * std::cos(est.yaw), -est.radius * std::sin(est.yaw), 0.0);
+    if (!est.armor_xyza_list.empty()) {
+      armor_g = est.armor_xyza_list[0].head<3>();
+    }
+    const Eigen::Vector3d armor_c = common::point_gimbal_to_camera(armor_g, gt.camera);
+    Eigen::Vector3d ekf_armor_3d(armor_c.x(), armor_c.y(), armor_c.z() + cam_height_);
 
     cv::Point2f px_ekf;
     double zc_ekf;

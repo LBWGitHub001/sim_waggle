@@ -63,6 +63,7 @@ AppConfig load_config(const std::string & path)
   if (yaml["simulation"]) {
     cfg.sim.fps = yaml["simulation"]["fps"].as<int>(50);
     cfg.sim.duration = yaml["simulation"]["duration"].as<double>(0.0);
+    cfg.sim.bullet_speed = yaml["simulation"]["bullet_speed"].as<double>(25.0);
   }
   if (yaml["my_robot"]) {
     auto mr = yaml["my_robot"];
@@ -82,6 +83,8 @@ AppConfig load_config(const std::string & path)
     auto vel = tr["vel"].as<std::vector<double>>();
     cfg.sim.target_vel = Eigen::Vector3d(vel[0], vel[1], vel[2]);
     cfg.sim.target_radius = tr["radius"].as<double>(0.20);
+    cfg.sim.target_l = tr["l"].as<double>(0.05);
+    cfg.sim.target_h = tr["h"].as<double>(0.05);
     cfg.sim.target_w = tr["w"].as<double>(4.0);
     cfg.sim.armor_num = tr["armor_num"].as<int>(4);
     load_xy_range(
@@ -106,6 +109,36 @@ AppConfig load_config(const std::string & path)
     if (ekf_n["p0"]) {
       auto p0_vec = ekf_n["p0"].as<std::vector<double>>();
       cfg.p0 = Eigen::Map<Eigen::VectorXd>(p0_vec.data(), p0_vec.size());
+    }
+  }
+  if (yaml["aimer"]) {
+    auto an = yaml["aimer"];
+    constexpr double kDeg = M_PI / 180.0;
+    cfg.sim.aimer.yaw_offset = an["yaw_offset"].as<double>(0.0) * kDeg;
+    cfg.sim.aimer.pitch_offset = an["pitch_offset"].as<double>(0.0) * kDeg;
+    cfg.sim.aimer.coming_angle = an["coming_angle"].as<double>(55.0) * kDeg;
+    cfg.sim.aimer.leaving_angle = an["leaving_angle"].as<double>(20.0) * kDeg;
+    cfg.sim.aimer.delay_time = an["delay_time"].as<double>(0.0);
+  }
+  if (yaml["planner"]) {
+    auto pn = yaml["planner"];
+    cfg.sim.planner.max_yaw_acc = pn["max_yaw_acc"].as<double>(50.0);
+    cfg.sim.planner.max_pitch_acc = pn["max_pitch_acc"].as<double>(100.0);
+    if (pn["Q_yaw"]) {
+      auto q = pn["Q_yaw"].as<std::vector<double>>();
+      if (q.size() >= 2) cfg.sim.planner.Q_yaw = Eigen::Vector2d(q[0], q[1]);
+    }
+    if (pn["R_yaw"]) {
+      auto r = pn["R_yaw"].as<std::vector<double>>();
+      if (!r.empty()) cfg.sim.planner.R_yaw = r[0];
+    }
+    if (pn["Q_pitch"]) {
+      auto q = pn["Q_pitch"].as<std::vector<double>>();
+      if (q.size() >= 2) cfg.sim.planner.Q_pitch = Eigen::Vector2d(q[0], q[1]);
+    }
+    if (pn["R_pitch"]) {
+      auto r = pn["R_pitch"].as<std::vector<double>>();
+      if (!r.empty()) cfg.sim.planner.R_pitch = r[0];
     }
   }
   if (yaml["remote_logger"]) {
@@ -155,7 +188,8 @@ int main(int argc, char * argv[])
     cfg.sim.target_radius, cfg.sim.armor_num, cfg.ekf, cfg.p0);
   const std::string tracker_name = tracker->name();
   tracker::TrackerNode tracker_node(
-    std::move(tracker), obs_channel, est_slot, gt_slot, cfg.sim.bullet_speed);
+    std::move(tracker), obs_channel, est_slot, gt_slot, cfg.sim.bullet_speed,
+    cfg.sim.aimer, cfg.sim.planner);
 
   auto & logger = omniscope::RemoteLogger::instance();
   logger.init(cfg.logger);

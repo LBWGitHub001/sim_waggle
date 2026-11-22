@@ -33,6 +33,9 @@ else()
   FetchContent_MakeAvailable(omniscope)
 endif()
 
+# TinyMPC（给 common::Planner 用）。必须在 common 之前。
+add_subdirectory(thirdparty/tinympc)
+
 # -----------------------------------------------------------------------------
 # 三个独立包（类似 ROS workspace 的独立 package）：
 #   common/  消息与同步原语（两节点的唯一耦合点）

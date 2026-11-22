@@ -3,6 +3,7 @@
 simulation:
   fps: 100
   duration: 0  # 0: 无限循环，直到按下 Ctrl+C；>0: 指定运行秒数
+  bullet_speed: 25.0              # 弹速 (m/s)，给弹道解算 / Planner
 
 my_robot:
   chassis_w: 12.0                  # 底盘小陀螺角速度 (rad/s)
@@ -17,7 +18,9 @@ target_robot:
   vel: [0.0, 0.0, 0.0]            # 目标平移速度 [vx, vy, vz] (m/s)；碰到区间反向
   x_range: [2.0, 5.0]             # 目标平动区间 [xmin, xmax] (m)
   y_range: [-1.5, 1.5]            # 目标平动区间 [ymin, ymax] (m)
-  radius: 0.20                    # 装甲板旋转半径 (m)
+  radius: 0.20                    # 对侧装甲半径 r，id 0/2 (m)
+  l: 0.05                         # 邻侧半径增量：id 1/3 半径 = r+l (m)
+  h: 0.05                         # 邻侧相对车心的 z 偏置 (m)
   w: 7.0                          # 目标自转角速度 (rad/s)
   armor_num: 4                    # 装甲板数量
 
@@ -26,6 +29,21 @@ measurement:
   noise_pos_std: 0.005            # 观测位置噪声标准差 (m)
   noise_yaw_std: 0.01             # 观测装甲板角噪声标准差 (rad)
   noise_acc_std: 0.1              # 仿真 IMU xy 高斯噪声标准差 σ_u (m/s^2)；u = û + N(0, σ_u²)
+
+aimer:
+  yaw_offset: 0.0                 # 度，加到 atan2(y,x)
+  pitch_offset: 0.0               # 度，加到弹道抬头角
+  coming_angle: 55.0              # 度，小陀螺入板角
+  leaving_angle: 20.0             # 度，小陀螺出板角
+  delay_time: 0.0                 # s，仿真无 detector 墙钟，只外推飞行时间
+
+planner:
+  max_yaw_acc: 50.0               # rad/s^2
+  Q_yaw: [9.0e6, 0.0]
+  R_yaw: [1.0]
+  max_pitch_acc: 100.0            # rad/s^2
+  Q_pitch: [9.0e6, 0.0]
+  R_pitch: [1.0]
 
 ekf:
   q_xyz_acc_var: 10.0            # 未建模 z 加速度方差

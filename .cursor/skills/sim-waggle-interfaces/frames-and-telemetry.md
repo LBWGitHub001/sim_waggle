@@ -9,7 +9,7 @@
 | **camera** | 同一云台中心 | 随 look-at yaw | HUD、光轴 Marker、TF |
 | **robot** | 敌车中心 | 随敌车 yaw | 装甲板绑定；`robot.armor` Marker |
 
-运动学在 odom 积分：`gimbal.pos = chassis.pos + Rz(θ_c)*d`，`camera.pos = gimbal.pos`，`camera.yaw = atan2(target - gimbal.pos)`。装甲 `p_odom = robot.center + Rz(robot.yaw)*p_robot`。`ground_truth()` 返回 odom。日常滤波用 `express_target_in_gimbal(gt)`；HUD 用 `express_target_in_camera(gt)`（`common/frames.hpp`）。
+运动学在 odom 积分：`gimbal.pos = chassis.pos + Rz(θ_c)*d`，`camera.pos = gimbal.pos`，`camera.yaw = atan2(target - gimbal.pos)`。装甲 `p_odom = robot.center + Rz(robot.yaw)*p_robot`。四装甲：对侧 (id 0,2) 半径 `r`、相对车心 `z=0`；邻侧 (id 1,3) 半径 `r+l`、`z=h`（与 EKF `x[8,9,10]` 一致）。`ground_truth()` 返回 odom。日常滤波用 `express_target_in_gimbal(gt)`；HUD 用 `express_target_in_camera(gt)`（`common/frames.hpp`）。
 
 观测（`sim/camera_sensor.cpp`）：
 
@@ -68,12 +68,21 @@ kal_vel_x/y/z            m/s
 kal_yaw_deg              deg
 kal_w                    rad/s
 kal_radius_mm            mm
+kal_l_mm / kal_h_mm      mm
+true_l_mm / true_h_mm    mm
 err_x/y/z                m
 err_vx/y/z               m/s
 err_yaw_deg              deg
 err_w                    rad/s
-err_r_mm                 mm
+err_r_mm / err_l_mm / err_h_mm  mm
 err_pos / err_vel        m / m/s
+cmd_target_yaw/pitch_deg deg   无约束射击角
+cmd_yaw/pitch_deg        deg   云台目标（TinyMPC 可行角）
+cmd_yaw_vel/acc          rad/s, rad/s²
+cmd_pitch_vel/acc
+cmd_fly_time             s
+true_camera_yaw_deg      deg   GT look-at
+true_aim_yaw_deg         deg   可见装甲 atan2
 ```
 
 分支上可另 `plot` 新键。禁止改名已有键。禁止在 main 里 `plot`。

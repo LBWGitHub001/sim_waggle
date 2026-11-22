@@ -16,11 +16,16 @@ inline double wrap_pi(double angle)
   return a - M_PI;
 }
 
-// robot 系固定装甲：第 i 块在车体前方为 -x（与历史几何一致）
-inline Eigen::Vector3d armor_in_robot(int i, int armor_num, double radius)
+// robot 系固定装甲：第 i 块在车体前方为 -x（与 EKF h_armor_xyz 一致）
+// armor_num==4：对侧 (0,2) 半径 r、z=0；邻侧 (1,3) 半径 r+l、z=h。其它 n 单半径、z=0。
+inline Eigen::Vector3d armor_in_robot(
+  int i, int armor_num, double radius, double l = 0.0, double h = 0.0)
 {
   const double yaw_i = static_cast<double>(i) * 2.0 * M_PI / static_cast<double>(armor_num);
-  return Eigen::Vector3d(-radius * std::cos(yaw_i), -radius * std::sin(yaw_i), 0.0);
+  const bool use_l_h = (armor_num == 4) && (i == 1 || i == 3);
+  const double r = use_l_h ? radius + l : radius;
+  const double z = use_l_h ? h : 0.0;
+  return Eigen::Vector3d(-r * std::cos(yaw_i), -r * std::sin(yaw_i), z);
 }
 
 inline double armor_yaw_in_robot(int i, int armor_num)

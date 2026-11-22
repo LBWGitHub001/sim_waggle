@@ -57,7 +57,9 @@ struct TargetState
   Eigen::Vector3d vel = Eigen::Vector3d::Zero();
   double yaw = 0.0;
   double w = 0.0; // 自转角速度 (rad/s)
-  double radius = 0.20;
+  double radius = 0.20; // 对侧装甲半径 r（id 0,2）
+  double l = 0.0;       // 邻侧半径增量：id 1,3 半径 = r+l
+  double h = 0.0;       // 邻侧相对车心的 z 偏置
   int armor_num = 4;
   std::vector<Eigen::Vector3d> armors_pos;
   std::vector<double> armors_yaw;
@@ -101,6 +103,10 @@ struct TargetEstimate
   double yaw = 0.0;
   double w = 0.0;
   double radius = 0.20;
+  double l = 0.0; // x[9] = r2-r1
+  double h = 0.0; // x[10] = z2-z1
+  bool jumped = false;
+  int armor_num = 4;
   std::vector<Eigen::Vector4d> armor_xyza_list; // 4 块拟合装甲板 [x, y, z, yaw]
   double last_nis = 0.0;
   bool diverged = false;
@@ -128,6 +134,8 @@ struct MetricsResult
   double err_yaw = 0.0; // rad, (-pi, pi]
   double err_w = 0.0;   // rad/s
   double err_r = 0.0;   // m
+  double err_l = 0.0;   // m
+  double err_h = 0.0;   // m
 
   double pos_err_norm = 0.0;
   double vel_err_norm = 0.0;
@@ -146,12 +154,48 @@ struct MetricsResult
   double max_vel = 0.0;
 };
 
+// 云台命令：target_* 为无约束射击角，yaw/pitch 为 TinyMPC 可行角
+struct GimbalCommand
+{
+  bool valid = false;
+  double target_yaw = 0.0;
+  double target_pitch = 0.0;
+  double yaw = 0.0;
+  double pitch = 0.0;
+  double yaw_vel = 0.0;
+  double yaw_acc = 0.0;
+  double pitch_vel = 0.0;
+  double pitch_acc = 0.0;
+  double fly_time = 0.0;
+  Eigen::Vector3d aim_xyz = Eigen::Vector3d::Zero();
+};
+
+struct AimerParams
+{
+  double yaw_offset = 0.0;   // rad
+  double pitch_offset = 0.0; // rad
+  double coming_angle = 55.0 * M_PI / 180.0;
+  double leaving_angle = 20.0 * M_PI / 180.0;
+  double delay_time = 0.0;
+};
+
+struct PlannerParams
+{
+  double max_yaw_acc = 50.0;
+  Eigen::Vector2d Q_yaw{9.0e6, 0.0};
+  double R_yaw = 1.0;
+  double max_pitch_acc = 100.0;
+  Eigen::Vector2d Q_pitch{9.0e6, 0.0};
+  double R_pitch = 1.0;
+};
+
 // /target_estimate 话题（TrackerNode 发布 → 可视化读取）
 struct TrackerOutput
 {
   TargetEstimate est;
   double sim_t = 0.0;
   MetricsResult metrics;
+  GimbalCommand cmd;
 };
 
 // 8. 仿真系统参数配置
@@ -171,6 +215,8 @@ struct SimulationConfig
   Eigen::Vector3d target_init_pos{3.5, 0.0, 0.0};
   Eigen::Vector3d target_vel{0.0, 0.0, 0.0};
   double target_radius = 0.20;
+  double target_l = 0.05; // 邻侧半径增量
+  double target_h = 0.05; // 邻侧 z 偏置
   double target_w = 4.0;
   int armor_num = 4;
   double target_x_min = 2.0;
@@ -188,6 +234,9 @@ struct SimulationConfig
   int fps = 50;
   double duration = 0.0; // 0: 无限循环
   double bullet_speed = 25.0; // m/s
+
+  AimerParams aimer;
+  PlannerParams planner;
 };
 
 }  // namespace common

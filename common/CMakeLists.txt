@@ -4,6 +4,9 @@
 # -----------------------------------------------------------------------------
 add_library(omni_common STATIC
   metrics.cpp
+  trajectory.cpp
+  aim.cpp
+  planner.cpp
 )
 
 # 包内头文件以扁平风格 include（"types.hpp"），仅暴露本目录
@@ -13,4 +16,5 @@ target_include_directories(omni_common PUBLIC
 
 target_link_libraries(omni_common PUBLIC
   Eigen3::Eigen
+  tinympcstatic
 )

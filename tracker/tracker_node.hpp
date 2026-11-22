@@ -9,6 +9,7 @@
 #include "types.hpp"
 #include "channel.hpp"
 #include "metrics.hpp"
+#include "planner.hpp"
 #include "ego_control_tracker.hpp"
 
 namespace tracker
@@ -24,7 +25,9 @@ public:
     common::Channel<common::StampedObservation> & obs_in,
     common::LatestSlot<common::TrackerOutput> & est_out,
     common::LatestSlot<common::GroundTruth> & gt_in,
-    double bullet_speed = 25.0);
+    double bullet_speed = 25.0,
+    common::AimerParams aimer = {},
+    common::PlannerParams planner = {});
 
   void start();
   void stop() { stop_requested_ = true; }
@@ -41,6 +44,7 @@ private:
   common::LatestSlot<common::TrackerOutput> & est_out_;
   common::LatestSlot<common::GroundTruth> & gt_in_;
   double bullet_speed_ = 25.0;
+  common::Planner planner_;
   common::SimulationMetrics metrics_;
 
   std::thread thread_;
