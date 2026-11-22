@@ -195,38 +195,10 @@ void TrackerNode::run()
       omniscope::plot({
         {"kal_center_x", target.center.x()},
         {"kal_center_y", target.center.y()},
-        {"kal_center_z", target.center.z()},
         {"kal_vel_x", target.velocity.x()},
         {"kal_vel_y", target.velocity.y()},
-        {"kal_vel_z", target.velocity.z()},
         {"kal_yaw_deg", target.yaw * 180.0 / M_PI},
         {"kal_w", target.w},
-        {"kal_radius_mm", target.radius * 1000.0},
-        {"kal_l_mm", target.l * 1000.0},
-        {"kal_h_mm", target.h * 1000.0},
-      }, msg.stamp_ns);
-      if (have_gt) {
-        omniscope::plot({
-          {"true_l_mm", enemy_g.l * 1000.0},
-          {"true_h_mm", enemy_g.h * 1000.0},
-        }, msg.stamp_ns);
-      }
-      omniscope::plot({
-        {"err_x", metrics.err_x},
-        {"err_y", metrics.err_y},
-        {"err_z", metrics.err_z},
-      }, msg.stamp_ns);
-      omniscope::plot({
-        {"err_vx", metrics.err_vx},
-        {"err_vy", metrics.err_vy},
-        {"err_vz", metrics.err_vz},
-        {"err_yaw_deg", metrics.err_yaw * 180.0 / M_PI},
-        {"err_w", metrics.err_w},
-        {"err_r_mm", metrics.err_r * 1000.0},
-        {"err_l_mm", metrics.err_l * 1000.0},
-        {"err_h_mm", metrics.err_h * 1000.0},
-        {"err_pos", metrics.pos_err_norm},
-        {"err_vel", metrics.vel_err_norm},
       }, msg.stamp_ns);
       publish_kalman_markers(target, msg.stamp_ns);
     }

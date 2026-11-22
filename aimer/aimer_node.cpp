@@ -94,15 +94,10 @@ void AimerNode::run()
 
     if (cmd.valid) {
       omniscope::plot({
-        {"cmd_target_yaw_deg", cmd.target_yaw * 180.0 / M_PI},
-        {"cmd_target_pitch_deg", cmd.target_pitch * 180.0 / M_PI},
         {"cmd_yaw_deg", cmd.yaw * 180.0 / M_PI},
         {"cmd_pitch_deg", cmd.pitch * 180.0 / M_PI},
         {"cmd_yaw_vel", cmd.yaw_vel},
-        {"cmd_yaw_acc", cmd.yaw_acc},
         {"cmd_pitch_vel", cmd.pitch_vel},
-        {"cmd_pitch_acc", cmd.pitch_acc},
-        {"cmd_fly_time", cmd.fly_time},
       }, msg.stamp_ns);
       publish_aim_markers(cmd.aim_xyz, msg.stamp_ns);
     }

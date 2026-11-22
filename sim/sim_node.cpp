@@ -319,28 +319,16 @@ void SimNode::publish(double sim_t, uint64_t frame)
   omniscope::plot({
     {"obs_armor_x", obs.xyz_in_gimbal.x()},
     {"obs_armor_y", obs.xyz_in_gimbal.y()},
-    {"obs_armor_z", obs.xyz_in_gimbal.z()},
   }, stamp_ns);
   omniscope::plot({
     {"true_center_x", enemy.center.x()},
     {"true_center_y", enemy.center.y()},
-    {"true_center_z", enemy.center.z()},
   }, stamp_ns);
   omniscope::plot({
     {"obs_armor_yaw_deg", obs.yaw_raw * 180.0 / M_PI},
     {"obs_w_ego", gt.chassis.w},
-    {"true_armor_x", true_armor.x()},
-    {"true_armor_y", true_armor.y()},
-    {"true_armor_z", true_armor.z()},
-    {"true_armor_yaw_deg", true_armor_yaw * 180.0 / M_PI},
     {"true_vel_x", enemy.vel.x()},
     {"true_vel_y", enemy.vel.y()},
-    {"true_vel_z", enemy.vel.z()},
-    {"true_yaw_deg", enemy.yaw * 180.0 / M_PI},
-    {"true_w", enemy.w},
-    {"true_w_ego", gt.chassis.w},
-    {"ego_acc_x", msg.ego_acc.x()},
-    {"ego_acc_y", msg.ego_acc.y()},
   }, stamp_ns);
   omniscope::plot({
     {"u_true_x", u_true.x()},

@@ -1,7 +1,7 @@
 # sim_waggle simulation configuration
 
 simulation:
-  fps: 100
+  fps: 200
   duration: 0  # 0: 无限循环，直到按下 Ctrl+C；>0: 指定运行秒数
   bullet_speed: 25.0              # 弹速 (m/s)，给弹道解算
 
@@ -40,8 +40,8 @@ aimer:
 ekf:
   q_xyz_acc_var: 10.0            # 未建模 z 加速度方差
   q_yaw_acc_var: 7.50             # 角加速度方差
-  m_ax: 100.0                       # M 对角 ax 方差 (m/s^2)^2，应对齐 (noise_acc_std)²
-  m_ay: 100.0                       # M 对角 ay 方差 (m/s^2)^2
+  m_ax: 10.0                       # M 对角 ax 方差 (m/s^2)^2，应对齐 (noise_acc_std)²
+  m_ay: 10.0                       # M 对角 ay 方差 (m/s^2)^2
   r_yaw: 0.04                     # yaw 观测噪声
   r_pitch: 0.04                   # pitch 观测噪声
   r_dist_base: 0.015              # 距离观测噪声基础值
