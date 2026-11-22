@@ -2,7 +2,7 @@
 
 本工程是一个**独立、完整、现代高内聚架构**的 C++ 仿真测试平台。从 RoboMaster 自瞄代码库 `auto_aim_` 提取了原版 Kalman 滤波逻辑，模拟**云台旋转中心与底盘旋转中心不重合（偏置 $R_d$）在底盘小陀螺/摆动（$\omega_c$）时对自瞄后端 Kalman 滤波产生的影响**。
 
-本工程严格贯彻**对 OmniScope 零侵入原则**（Zero-Intrusion），仅将 [OmniScope](https://github.com/LBWGitHub001/OmniScope.git) 视作只读外部 SDK，由节点直接调用 `omniscope::plot` 上报遥测：
+本工程严格贯彻**对 OmniScope 零侵入原则**（Zero-Intrusion），仅将 [OmniScope](https://github.com/nuaa-rm/OmniScope.git) 视作只读外部 SDK，由节点直接调用 `omniscope::plot` 上报遥测：
 **`SimNode` 发观测与真值**、**`TrackerNode` 发 Kalman 状态**，3D Marker 与相机图像在 `main` 里直接下发；不设任何适配/转发层。
 
 ---
