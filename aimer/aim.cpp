@@ -90,7 +90,7 @@ AimPoint Aimer::choose_aim_point(const TargetEstimate & est)
   const auto & plates = est.armor_xyza_list;
   if (plates.empty() || est.x.size() < 11) return {};
 
-  if (!est.jumped) return {true, plates[0]};
+  if (!est.jumped) return {true, plates[0], 0};
 
   const int armor_num = static_cast<int>(plates.size());
   const double center_yaw = std::atan2(est.x[2], est.x[0]);
@@ -108,7 +108,7 @@ AimPoint Aimer::choose_aim_point(const TargetEstimate & est)
       if (std::abs(delta_angle_list[static_cast<size_t>(i)]) > 60.0 * kDeg) continue;
       id_list.push_back(i);
     }
-    if (id_list.empty()) return {false, plates[0]};
+    if (id_list.empty()) return {false, plates[0], 0};
 
     if (id_list.size() > 1) {
       const int id0 = id_list[0];
@@ -119,11 +119,11 @@ AimPoint Aimer::choose_aim_point(const TargetEstimate & est)
                      ? id0
                      : id1;
       }
-      return {true, plates[static_cast<size_t>(lock_id_)]};
+      return {true, plates[static_cast<size_t>(lock_id_)], lock_id_};
     }
 
     lock_id_ = -1;
-    return {true, plates[static_cast<size_t>(id_list[0])]};
+    return {true, plates[static_cast<size_t>(id_list[0])], id_list[0]};
   }
 
   const double coming_angle = params_.coming_angle;
@@ -131,11 +131,11 @@ AimPoint Aimer::choose_aim_point(const TargetEstimate & est)
   for (int i = 0; i < armor_num; i++) {
     const double da = delta_angle_list[static_cast<size_t>(i)];
     if (std::abs(da) > coming_angle) continue;
-    if (est.x[7] > 0.0 && da < leaving_angle) return {true, plates[static_cast<size_t>(i)]};
-    if (est.x[7] < 0.0 && da > -leaving_angle) return {true, plates[static_cast<size_t>(i)]};
+    if (est.x[7] > 0.0 && da < leaving_angle) return {true, plates[static_cast<size_t>(i)], i};
+    if (est.x[7] < 0.0 && da > -leaving_angle) return {true, plates[static_cast<size_t>(i)], i};
   }
 
-  return {false, plates[0]};
+  return {false, plates[0], 0};
 }
 
 AimPoint Aimer::yaw_pitch(const TargetEstimate & est, double bullet_speed, Eigen::Vector2d & yp)
@@ -173,22 +173,26 @@ GimbalCommand Aimer::aim(TargetEstimate est, double bullet_speed)
   double prev_fly_time = traj0.fly_time;
   BulletTrajectory current_traj = traj0;
   AimPoint aim_pt = aim0;
+  Eigen::Vector3d final_xyz = xyz0;
 
   for (int iter = 0; iter < 10; ++iter) {
-    TargetEstimate pred = propagate_estimate(est, prev_fly_time);
+    // 弹从当前云台原点射出，工作系轴向又不转。飞行时间内只转装甲，不要用
+    // gimbal 系相对速度去平移车心——那项主要是云台公转，无 control 时 Kalman
+    // 的 vx/vy 还和真值反相，cmd 与 true_aim 会整段翻转。
+    TargetEstimate pred = est;
+    pred.x[6] = wrap_pi(est.x[6] + est.x[7] * prev_fly_time);
+    fill_derived(pred);
     aim_pt = choose_aim_point(pred);
     if (!aim_pt.valid) return cmd;
 
-    const Eigen::Vector3d xyz = aim_pt.xyza.head<3>();
-    const double d = std::hypot(xyz.x(), xyz.y());
-    current_traj = BulletTrajectory(bullet_speed, d, xyz.z());
+    final_xyz = aim_pt.xyza.head<3>();
+    const double d = std::hypot(final_xyz.x(), final_xyz.y());
+    current_traj = BulletTrajectory(bullet_speed, d, final_xyz.z());
     if (current_traj.unsolvable) return cmd;
 
     if (std::abs(current_traj.fly_time - prev_fly_time) < 0.001) break;
     prev_fly_time = current_traj.fly_time;
   }
-
-  const Eigen::Vector3d final_xyz = aim_pt.xyza.head<3>();
   cmd.valid = true;
   cmd.aim_xyz = final_xyz;
   cmd.fly_time = current_traj.fly_time;

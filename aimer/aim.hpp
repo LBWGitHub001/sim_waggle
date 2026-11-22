@@ -10,6 +10,7 @@ struct AimPoint
 {
   bool valid = false;
   Eigen::Vector4d xyza = Eigen::Vector4d::Zero();
+  int id = -1;
 };
 
 /// 11 维 CV 外推，并按 r/l/h 重建装甲板。不改协方差。
