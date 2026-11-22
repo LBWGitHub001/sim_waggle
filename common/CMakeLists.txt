@@ -4,6 +4,8 @@
 # -----------------------------------------------------------------------------
 add_library(omni_common STATIC
   metrics.cpp
+  trajectory.cpp
+  aim.cpp
 )
 
 # 包内头文件以扁平风格 include（"types.hpp"），仅暴露本目录
