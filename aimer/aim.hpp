@@ -17,9 +17,8 @@ TargetEstimate propagate_estimate(const TargetEstimate & est, double dt);
 
 Eigen::Vector3d h_armor_xyz(const Eigen::VectorXd & x, int id, int armor_num);
 
-/// 真值瞄准：gimbal 系 GT 状态 + delay，再按可见板迭代弹道飞行时间，取外推后的板位。
-GimbalCommand aim_from_ground_truth(
-  const GroundTruth & gt, const AimerParams & params, double bullet_speed);
+/// gimbal 系 GT → 11 维状态（jumped=true，装甲由 r/l/h 重建）。给 Aimer::aim 用。
+TargetEstimate estimate_from_ground_truth(const GroundTruth & gt);
 
 /// 弹道 Aimer：coming/leaving 选板 + 飞行时间迭代。输出无约束射击角。
 class Aimer
