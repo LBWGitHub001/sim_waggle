@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# 依赖库查找
 find_package(Threads REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs highgui)
@@ -33,28 +32,28 @@ else()
   FetchContent_MakeAvailable(omniscope)
 endif()
 
-# TinyMPC（给 common::Planner 用）。必须在 common 之前。
+# TinyMPC 只给 aimer::Planner 用，须在 aimer 之前。
 add_subdirectory(thirdparty/tinympc)
 
 # -----------------------------------------------------------------------------
-# 三个独立包（类似 ROS workspace 的独立 package）：
-#   common/  消息与同步原语（两节点的唯一耦合点）
-#   sim/     SimNode：物理仿真线程      —— 编译期看不到 tracker 头文件
-#   tracker/ TrackerNode：EKF 追踪线程  —— 编译期看不到 sim 头文件
+# 四个独立包：
+#   common/   消息 / 通道 / 坐标系（头文件）
+#   sim/      SimNode
+#   tracker/  EKF Target + TrackerNode
+#   aimer/    Planner + AimerNode
 # -----------------------------------------------------------------------------
 add_subdirectory(common)
 add_subdirectory(sim)
 add_subdirectory(tracker)
+add_subdirectory(aimer)
 
 # -----------------------------------------------------------------------------
-# 主程序：节点接线 + 可视化（render 为 app 侧私有）
+# 主程序：YAML + 起停三线程。禁止 plot / plot_image。
 # -----------------------------------------------------------------------------
 add_executable(sim_waggle
   app/main.cpp
-  render/camera_detector_renderer.cpp
 )
 
-# render 仍使用 "common/..." 根式 include
 target_include_directories(sim_waggle PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -62,9 +61,9 @@ target_include_directories(sim_waggle PRIVATE
 target_link_libraries(sim_waggle PRIVATE
   sim_node
   tracker_node
+  aimer_node
   omni_common
   OmniScope::Cpp
-  ${OpenCV_LIBS}
   fmt::fmt
   yaml-cpp
   nlohmann_json::nlohmann_json

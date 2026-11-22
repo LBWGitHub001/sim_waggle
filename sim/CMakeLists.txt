@@ -1,10 +1,9 @@
 # -----------------------------------------------------------------------------
-# sim 包：物理运动学与传感器感知模拟 + SimNode 线程
-# 独立子工程：include 路径只有 sim/ 与 common/，编译期看不到 tracker 头文件
+# sim 包：物理运动学 + SimNode
+# include 只有 sim/ 与 common/，编译期看不到 tracker / aimer
 # -----------------------------------------------------------------------------
 add_library(sim_node STATIC
   kinematics.cpp
-  camera_sensor.cpp
   sim_node.cpp
 )
 

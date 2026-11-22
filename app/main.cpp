@@ -1,21 +1,20 @@
-#include <algorithm>
 #include <atomic>
 #include <csignal>
 #include <chrono>
 #include <cmath>
-#include <thread>
 #include <iostream>
+#include <thread>
 #include <vector>
-#include <yaml-cpp/yaml.h>
+
 #include <fmt/format.h>
 #include <omniscope/omniscope.hpp>
+#include <yaml-cpp/yaml.h>
 
-#include "common/types.hpp"
+#include "aimer/aimer_node.hpp"
 #include "common/channel.hpp"
+#include "common/types.hpp"
 #include "sim/sim_node.hpp"
-#include "tracker/baseline_tracker.hpp"
 #include "tracker/tracker_node.hpp"
-#include "render/camera_detector_renderer.hpp"
 
 namespace
 {
@@ -30,7 +29,7 @@ struct AppConfig
 {
   common::SimulationConfig sim;
   omniscope::RemoteLogger::Config logger;
-  auto_aim::EkfParams ekf;
+  tracker::EkfParams ekf;
   Eigen::VectorXd p0;
 };
 
@@ -153,112 +152,73 @@ int main(int argc, char * argv[])
 
   common::Channel<common::StampedObservation> obs_channel;
   common::LatestSlot<common::GroundTruth> gt_slot;
-  common::LatestSlot<common::StampedObservation> obs_slot;
-  common::LatestSlot<common::TrackerOutput> est_slot;
+  common::Channel<common::TrackerOutput> est_channel;
+  common::LatestSlot<common::GimbalCommand> cmd_slot;
 
-  sim::SimNode sim_node(cfg.sim, {obs_channel, gt_slot, obs_slot});
-
-  auto tracker = std::make_unique<tracker::BaselineTracker>(
-    cfg.sim.target_radius, cfg.sim.armor_num, cfg.ekf, cfg.p0);
-  const std::string tracker_name = tracker->name();
+  sim::SimNode sim_node(cfg.sim, {obs_channel, gt_slot});
   tracker::TrackerNode tracker_node(
-    std::move(tracker), obs_channel, est_slot, gt_slot, cfg.sim.bullet_speed,
-    cfg.sim.aimer, cfg.sim.planner);
+    cfg.sim.target_radius, cfg.sim.armor_num, cfg.ekf, cfg.p0, obs_channel, est_channel, gt_slot,
+    cfg.sim.bullet_speed);
+  aimer::AimerNode aimer_node(
+    cfg.sim.aimer, cfg.sim.planner, est_channel, gt_slot, cmd_slot, cfg.sim.bullet_speed);
 
   auto & logger = omniscope::RemoteLogger::instance();
   logger.init(cfg.logger);
 
-  render::CameraDetectorRenderer renderer(800, 600, 60.0);
-
   sim_node.start();
   tracker_node.start();
+  aimer_node.start();
 
   logger.log(
-    "INFO", "sim_waggle started: tracker={}, chassis_w={:.1f}rad/s, offset={:.1f}cm, fps={}",
-    tracker_name, cfg.sim.chassis_w, cfg.sim.gimbal_offset.norm() * 100.0, cfg.sim.fps);
+    "INFO", "sim_waggle started: chassis_w={:.1f}rad/s, offset={:.1f}cm, fps={}",
+    cfg.sim.chassis_w, cfg.sim.gimbal_offset.norm() * 100.0, cfg.sim.fps);
 
   std::cout << "========================================================\n"
-            << "  sim_waggle multi-thread node simulation running\n"
-            << "  SimNode --> [FIFO Channel] --> TrackerNode\n"
-            << "  Active Tracker:     " << tracker_name << "\n"
+            << "  sim_waggle  SimNode --> TrackerNode --> AimerNode\n"
             << "  Chassis spin speed: " << cfg.sim.chassis_w << " rad/s\n"
             << "  Gimbal offset:      " << cfg.sim.gimbal_offset.norm() * 100.0 << " cm\n"
             << "  Target distance:    " << cfg.sim.target_init_pos.norm() << " m\n"
             << "  OmniScope Portal:   http://127.0.0.1:8080 (3D & Curves)\n"
             << "========================================================\n";
 
-  const auto frame_interval = std::chrono::microseconds(1000000 / std::max(cfg.sim.fps, 1));
   auto last_log = std::chrono::steady_clock::now();
   auto loop_t0 = last_log;
-  common::MetricsResult last_metrics;
 
   while (!g_quit.load()) {
-    auto tick_start = std::chrono::steady_clock::now();
+    if (sim_node.finished() && tracker_node.finished() && aimer_node.finished()) break;
 
-    if (sim_node.finished() && tracker_node.finished()) break;
-
-    common::GroundTruth gt;
-    common::TrackerOutput tout;
-    common::StampedObservation obs_msg;
-    const bool ready = gt_slot.get(gt) && est_slot.get(tout) && obs_slot.get(obs_msg);
-
-    if (ready) {
-      const auto & est = tout.est;
-      const auto & metrics = tout.metrics;
-      last_metrics = metrics;
-
-      cv::Mat frame = renderer.render(gt, est, obs_msg.obs, metrics);
-      logger.plot_image(frame, {{"name", "camera_detector"}});
-
-      if (tick_start - last_log >= std::chrono::seconds(2)) {
-        last_log = tick_start;
+    auto now = std::chrono::steady_clock::now();
+    if (now - last_log >= std::chrono::seconds(2)) {
+      last_log = now;
+      common::GroundTruth gt;
+      common::GimbalCommand cmd;
+      const bool have_gt = gt_slot.get(gt);
+      const bool have_cmd = cmd_slot.get(cmd);
+      if (have_gt) {
         logger.log(
-          "INFO",
-          "t={:.1f}s | kal-true: pos={:.3f}m vel={:.3f}m/s yaw={:.2f}deg"
-          " | rms p={:.3f}m v={:.3f}m/s | aim_bias={:.1f}cm nis={:.2f} obs_queue={}",
-          tout.sim_t, metrics.pos_err_norm, metrics.vel_err_norm,
-          metrics.err_yaw * 180.0 / M_PI,
-          metrics.rmse_pos, metrics.rmse_vel,
-          metrics.aim_lead_bias * 100.0, est.last_nis, obs_channel.size());
+          "INFO", "t={:.1f}s | true_w={:.2f} | cmd_yaw={:.2f}deg valid={} | obs_queue={}",
+          gt.t, gt.target.w,
+          have_cmd ? cmd.yaw * 180.0 / M_PI : 0.0, have_cmd && cmd.valid, obs_channel.size());
         std::cout << fmt::format(
-          "[t={:5.1f}s] kal-true pos/vel: {:5.3f} m / {:5.3f} m/s | yaw {:5.2f} deg"
-          " | RMS: {:5.3f} / {:5.3f} | Lead Bias: {:5.1f} cm | EKF w: {:5.2f} | Queue: {}\n",
-          tout.sim_t, metrics.pos_err_norm, metrics.vel_err_norm,
-          metrics.err_yaw * 180.0 / M_PI,
-          metrics.rmse_pos, metrics.rmse_vel,
-          metrics.aim_lead_bias * 100.0, est.w, obs_channel.size());
+          "[t={:5.1f}s] true_w={:5.2f} | cmd_yaw={:6.2f} deg valid={} | Queue: {}\n",
+          gt.t, gt.target.w, have_cmd ? cmd.yaw * 180.0 / M_PI : 0.0, have_cmd && cmd.valid,
+          obs_channel.size());
       }
     }
 
-    std::this_thread::sleep_until(tick_start + frame_interval);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   sim_node.stop();
   sim_node.join();
   tracker_node.join();
+  aimer_node.join();
 
   const double wall_s =
     std::chrono::duration<double>(std::chrono::steady_clock::now() - loop_t0).count();
 
-  const auto & m = last_metrics;
-  if (m.samples > 0) {
-    std::cout << fmt::format(
-      "\n===== kalman − truth ({} samples) =====\n"
-      "  pos: rms={:.3f} m  mean={:.3f} m  max={:.3f} m\n"
-      "  vel: rms={:.3f} m/s mean={:.3f} m/s max={:.3f} m/s\n"
-      "  aim |kal-true| = {:.2f} mm\n",
-      m.samples,
-      m.rmse_pos, m.mean_pos, m.max_pos,
-      m.rmse_vel, m.mean_vel, m.max_vel,
-      m.aim_lead_bias * 1000.0);
-    logger.log(
-      "INFO", "error summary: pos rms={:.3f}m, vel rms={:.3f}m/s, aim={:.2f}mm",
-      m.rmse_pos, m.rmse_vel, m.aim_lead_bias * 1000.0);
-  }
-
-  logger.log(
-    "INFO", "sim_waggle stopped after {:.2f}s ({} frames published)",
-    wall_s, sim_node.frames_published());
+  logger.log("INFO", "sim_waggle stopped after {:.2f}s ({} frames published)", wall_s,
+             sim_node.frames_published());
   logger.shutdown();
 
   std::cout << "\nSimulation finished cleanly.\n";

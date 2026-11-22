@@ -2,32 +2,29 @@
 #define TRACKER__TRACKER_NODE_HPP
 
 #include <atomic>
-#include <memory>
 #include <thread>
-#include <omniscope/omniscope.hpp>
 
-#include "types.hpp"
 #include "channel.hpp"
 #include "metrics.hpp"
-#include "planner.hpp"
-#include "baseline_tracker.hpp"
+#include "target.hpp"
+#include "types.hpp"
 
 namespace tracker
 {
 
-/// 追踪节点：事件驱动消费观测 FIFO，predict+update，发布估计。
-/// 误差分析与 kal_*/err_* / Kalman Marker 都在本节点、gimbal 工作系完成。
+/// 追踪节点：消费观测 FIFO，直接持有 Target（EKF），发布估计。不丢帧。
 class TrackerNode
 {
 public:
   TrackerNode(
-    std::unique_ptr<BaselineTracker> tracker,
+    double target_radius,
+    int armor_num,
+    EkfParams ekf,
+    Eigen::VectorXd p0,
     common::Channel<common::StampedObservation> & obs_in,
-    common::LatestSlot<common::TrackerOutput> & est_out,
+    common::Channel<common::TrackerOutput> & est_out,
     common::LatestSlot<common::GroundTruth> & gt_in,
-    double bullet_speed = 25.0,
-    common::AimerParams aimer = {},
-    common::PlannerParams planner = {});
+    double bullet_speed = 25.0);
 
   void start();
   void stop() { stop_requested_ = true; }
@@ -36,15 +33,13 @@ public:
 
 private:
   void run();
-  void publish_kalman_markers(
-    const common::TargetEstimate & est, const Eigen::Vector3d & aim_lead_pt);
+  void publish_kalman_markers(const common::TargetEstimate & est);
 
-  std::unique_ptr<BaselineTracker> tracker_;
+  Target target_;
   common::Channel<common::StampedObservation> & obs_in_;
-  common::LatestSlot<common::TrackerOutput> & est_out_;
+  common::Channel<common::TrackerOutput> & est_out_;
   common::LatestSlot<common::GroundTruth> & gt_in_;
   double bullet_speed_ = 25.0;
-  common::Planner planner_;
   common::SimulationMetrics metrics_;
 
   std::thread thread_;
