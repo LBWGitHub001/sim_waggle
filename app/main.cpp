@@ -162,7 +162,8 @@ int main(int argc, char * argv[])
     cfg.sim.target_radius, cfg.sim.armor_num, cfg.ekf, cfg.p0);
   const std::string tracker_name = tracker->name();
   tracker::TrackerNode tracker_node(
-    std::move(tracker), obs_channel, est_slot, gt_slot, cfg.sim.bullet_speed);
+    std::move(tracker), obs_channel, est_slot, gt_slot, cfg.sim.bullet_speed,
+    cfg.sim.aimer, cfg.sim.planner);
 
   auto & logger = omniscope::RemoteLogger::instance();
   logger.init(cfg.logger);
