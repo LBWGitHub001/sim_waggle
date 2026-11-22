@@ -32,15 +32,12 @@ else()
   FetchContent_MakeAvailable(omniscope)
 endif()
 
-# TinyMPC 只给 aimer::Planner 用，须在 aimer 之前。
-add_subdirectory(thirdparty/tinympc)
-
 # -----------------------------------------------------------------------------
 # 四个独立包：
 #   common/   消息 / 通道 / 坐标系（头文件）
 #   sim/      SimNode
 #   tracker/  EKF Target + TrackerNode
-#   aimer/    Planner + AimerNode
+#   aimer/    弹道 Aimer + AimerNode
 # -----------------------------------------------------------------------------
 add_subdirectory(common)
 add_subdirectory(sim)

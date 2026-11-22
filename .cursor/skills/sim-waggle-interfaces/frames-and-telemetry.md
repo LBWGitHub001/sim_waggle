@@ -80,7 +80,7 @@ AimerNode：
 
 ```
 cmd_target_yaw/pitch_deg deg   无约束射击角
-cmd_yaw/pitch_deg        deg   云台目标（TinyMPC 可行角）
+cmd_yaw/pitch_deg        deg   云台目标（= 无约束射击角）
 cmd_yaw_vel/acc          rad/s, rad/s²
 cmd_pitch_vel/acc
 cmd_fly_time             s

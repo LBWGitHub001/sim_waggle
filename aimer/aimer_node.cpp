@@ -25,12 +25,11 @@ omniscope::ColorRGBA to_rgba(float r, float g, float b, float a = 1.0f)
 
 AimerNode::AimerNode(
   common::AimerParams aimer,
-  common::PlannerParams planner,
   common::Channel<common::TrackerOutput> & est_in,
   common::LatestSlot<common::GroundTruth> & gt_in,
   common::LatestSlot<common::GimbalCommand> & cmd_out,
   double bullet_speed)
-: planner_(aimer, planner),
+: aimer_(aimer),
   est_in_(est_in),
   gt_in_(gt_in),
   cmd_out_(cmd_out),
@@ -89,7 +88,7 @@ void AimerNode::run()
     const auto & est = msg.est;
     common::GimbalCommand cmd;
     if (est.x.size() >= 11) {
-      cmd = planner_.plan(est, bullet_speed_);
+      cmd = aimer_.aim(est, bullet_speed_);
     }
     cmd_out_.set(cmd);
 

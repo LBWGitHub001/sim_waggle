@@ -3,7 +3,7 @@
 simulation:
   fps: 100
   duration: 0  # 0: 无限循环，直到按下 Ctrl+C；>0: 指定运行秒数
-  bullet_speed: 25.0              # 弹速 (m/s)，给弹道解算 / Planner
+  bullet_speed: 25.0              # 弹速 (m/s)，给弹道解算
 
 my_robot:
   chassis_w: 12.0                  # 底盘小陀螺角速度 (rad/s)
@@ -36,14 +36,6 @@ aimer:
   coming_angle: 55.0              # 度，小陀螺入板角
   leaving_angle: 20.0             # 度，小陀螺出板角
   delay_time: 0.0                 # s，仿真无 detector 墙钟，只外推飞行时间
-
-planner:
-  max_yaw_acc: 50.0               # rad/s^2
-  Q_yaw: [9.0e6, 0.0]
-  R_yaw: [1.0]
-  max_pitch_acc: 100.0            # rad/s^2
-  Q_pitch: [9.0e6, 0.0]
-  R_pitch: [1.0]
 
 ekf:
   q_xyz_acc_var: 10.0            # 未建模 z 加速度方差

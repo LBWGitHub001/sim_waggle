@@ -167,16 +167,6 @@ struct AimerParams
   double delay_time = 0.0;
 };
 
-struct PlannerParams
-{
-  double max_yaw_acc = 50.0;
-  Eigen::Vector2d Q_yaw{9.0e6, 0.0};
-  double R_yaw = 1.0;
-  double max_pitch_acc = 100.0;
-  Eigen::Vector2d Q_pitch{9.0e6, 0.0};
-  double R_pitch = 1.0;
-};
-
 struct TrackerOutput
 {
   TargetEstimate est;
@@ -217,7 +207,6 @@ struct SimulationConfig
   double bullet_speed = 25.0;
 
   AimerParams aimer;
-  PlannerParams planner;
 };
 
 }  // namespace common

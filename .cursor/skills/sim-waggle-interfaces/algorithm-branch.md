@@ -6,7 +6,7 @@
 
 | 分支 | 职责 |
 |---|---|
-| `main` | 仿真平台 + `tracker::Target` EKF + Aimer/Planner。接口变更只能是加性、向后兼容 |
+| `main` | 仿真平台 + `tracker::Target` EKF + Aimer。接口变更只能是加性、向后兼容 |
 | `exp/<name>` | 一个算法一次尝试。从 **当前 `main`** 拉出，不要从另一个 exp 叠 |
 | 现有例子 | `exp/ego-acc`：`Target::control(u)`，TrackerNode 里 `predict → control(ego_acc) → update` |
 

@@ -4,20 +4,19 @@
 #include <atomic>
 #include <thread>
 
+#include "aim.hpp"
 #include "channel.hpp"
-#include "planner.hpp"
 #include "types.hpp"
 
 namespace aimer
 {
 
-/// 火控节点：消费 TrackerOutput FIFO，Planner::plan 出云台角，发 cmd_* / aim.lead。
+/// 火控节点：消费 TrackerOutput FIFO，Aimer::aim 出无约束射击角，发 cmd_* / aim.lead。
 class AimerNode
 {
 public:
   AimerNode(
     common::AimerParams aimer,
-    common::PlannerParams planner,
     common::Channel<common::TrackerOutput> & est_in,
     common::LatestSlot<common::GroundTruth> & gt_in,
     common::LatestSlot<common::GimbalCommand> & cmd_out,
@@ -32,7 +31,7 @@ private:
   void run();
   void publish_aim_markers(const Eigen::Vector3d & aim_lead_pt);
 
-  common::Planner planner_;
+  common::Aimer aimer_;
   common::Channel<common::TrackerOutput> & est_in_;
   common::LatestSlot<common::GroundTruth> & gt_in_;
   common::LatestSlot<common::GimbalCommand> & cmd_out_;
