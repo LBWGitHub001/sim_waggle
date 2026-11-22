@@ -11,13 +11,15 @@
 | `ChassisState` | `pos, vel, yaw, w` | odom |
 | `GimbalState` | `pos, vel, yaw=0, pitch, R_gimbal2world=I` | odom 原点；轴向与 odom 平行 |
 | `CameraState` | `pos, yaw, pitch, R_camera2odom` | 与 gimbal 同原点；`R` = look-at → odom |
-| `TargetState` | `center, vel, yaw, w, radius, armor_num, armors_pos, armors_yaw` | odom（装甲由 robot 变来） |
+| `TargetState` | `center, vel, yaw, w, radius, l, h, armor_num, armors_pos, armors_yaw` | odom（装甲由 robot 变来） |
 | `GroundTruth` | `t, chassis, gimbal, camera, target, visible_armor_id` | odom 中间件 |
 | `ArmorObservation` | 见下 | 工作系 gimbal |
 | `TargetEstimate` | 见下 | gimbal |
 | `MetricsResult` | `err_*` / rms | gimbal；定义在 `types.hpp` |
 | `StampedObservation` | `obs, sim_t, frame` | SimNode → TrackerNode |
-| `TrackerOutput` | `est, sim_t, metrics` | TrackerNode → 可视化 / HUD |
+| `GimbalCommand` | `valid, target_yaw/pitch, yaw/pitch, *vel/*acc, fly_time, aim_xyz` | gimbal；无 `shoot` |
+| `AimerParams` / `PlannerParams` | 偏移、coming/leaving、Q/R、max_acc | — |
+| `TrackerOutput` | `est, sim_t, metrics, cmd` | TrackerNode → 可视化 / HUD |
 | `SimulationConfig` | 见 YAML 映射 | — |
 
 `ArmorObservation`：
@@ -28,13 +30,13 @@
 - `yaw_raw`：装甲 yaw 在方向不变的 gimbal（= odom yaw）
 - `confidence, name, color, type, width, height`
 
-`common/frames.hpp`：`express_target_in_gimbal`、`express_target_in_camera`、`point/vel/yaw_odom_to_gimbal`、`point/yaw_odom_to_camera`、`armor_in_robot`。
+`common/frames.hpp`：`express_target_in_gimbal`、`express_target_in_camera`、`point/vel/yaw_odom_to_gimbal`、`point/yaw_odom_to_camera`、`armor_in_robot(i,n,r,l=0,h=0)`。四装甲：id 0/2 用 `r,z=0`；id 1/3 用 `r+l,z=h`。
 
 `TargetEstimate`：
 
 - `x`：状态向量。基线 11 维；**下游假定 `x.size() >= 11`**
-- `center = (x0, x2, x4)`，`velocity = (x1, x3, x5)`，`yaw=x6`，`w=x7`，`radius=x8`
-- `armor_xyza_list`：每块 `[x, y, z, yaw]`
+- `center = (x0, x2, x4)`，`velocity = (x1, x3, x5)`，`yaw=x6`，`w=x7`，`radius=x8`，`l=x9`，`h=x10`
+- `jumped, armor_num, armor_xyza_list`：每块 `[x, y, z, yaw]`
 - `last_nis, diverged`
 
 扩展状态时：保留前 11 维语义，或在本分支同步改 `metrics` / `tracker_node` plot / `main` marker 的 `size() >= 11` 门槛。无论哪种，都要填上述导出字段。
@@ -62,7 +64,7 @@ compute_aim_lead_point(est, flight_time) -> Vector3d
 
 `MetricsResult`：误差 = Kalman − `gt.target`（调用方须先把 target 变到 gimbal）。由 TrackerNode 更新，塞进 `TrackerOutput.metrics`。
 
-- 分量：`err_{x,y,z,vx,vy,vz,yaw,w,r}`
+- 分量：`err_{x,y,z,vx,vy,vz,yaw,w,r,l,h}`
 - 范数：`pos_err_norm = |Δcenter|`，`vel_err_norm = |Δvel|`
 - 瞄准：`aim_lead_bias = |aim_kal - aim_true|`（同一 `flight_time`、同一落点公式）
 - 几何：`armor_err_norm`（拟合板到最近真值板均距）
@@ -75,6 +77,14 @@ compute_aim_lead_point(est, flight_time) -> Vector3d
 ### 1.4 FFT（`fft.hpp`）
 
 `FftAnalyzer(n=512, hop=n/2)`：`push(v, t) → bool` 窗口就绪；`compute(freq, mag, fs)` 单边 Hann 归一化幅度谱。给频域实验用；`tracker_node.cpp` 目前只 include、未接线。
+
+### 1.5 弹道与规划（`trajectory.hpp` / `aim.hpp` / `planner.hpp`）
+
+- `BulletTrajectory(v0, d, h)`：无阻力，`pitch` 抬头为正
+- `propagate_estimate(est, dt)`：11 维 CV + `h_armor_xyz` 重建装甲
+- `Aimer::aim`：coming/leaving 选板 + 飞行时间迭代 → 无约束 `target_yaw/pitch`
+- `Planner::plan`：TinyMPC 开环平滑（`dt=0.01`，`HORIZON=100`，\(x_0\) 来自射击轨迹，不读云台实测）。输出可行 `yaw/pitch/vel/acc`。无 `fire`
+- 求解器在 `thirdparty/tinympc`，`omni_common` 链接 `tinympcstatic`
 
 ## 2. `sim/` — 物理与观测
 
@@ -98,7 +108,7 @@ gimbal.vel = chassis.vel + ω × r
 gimbal.yaw = 0，R = I
 camera.pos = gimbal.pos
 camera.yaw = atan2(target.center - gimbal.pos)
-p_i_robot  = (-r cos(2π i/N), -r sin(...), 0)
+p_i_robot  = armor_in_robot(i,N,r,l,h)   // 4 装甲：偶 r/z=0，奇 (r+l)/z=h
 armor_i    = center + Rz(robot.yaw) * p_i_robot
 可见板     = 法向·(云台-装甲) 最大者
 ```
@@ -174,11 +184,12 @@ update(z, H, R, z_subtract) / update(z, H, R, h, z_subtract)
 
 ```
 TrackerNode(unique_ptr<BaselineTracker>, Channel<StampedObservation>&,
-            LatestSlot<TrackerOutput>&, LatestSlot<GroundTruth>&, bullet_speed=25)
+            LatestSlot<TrackerOutput>&, LatestSlot<GroundTruth>&,
+            bullet_speed=25, AimerParams={}, PlannerParams={})
 start() / stop() / join() / finished()
 ```
 
-每帧 `estimate()` 后 `express_target_in_gimbal` + `SimulationMetrics::update`，写 `TrackerOutput.metrics`，发 `kal_*`/`err_*` 与 Kalman Marker。
+每帧 `estimate()` 后 `express_target_in_gimbal` + `SimulationMetrics::update`，再 `Planner::plan` 写入 `TrackerOutput.cmd`，发 `kal_*`/`err_*`/`cmd_*` 与 Kalman Marker。
 
 ## 4. `app/` 接线
 
@@ -191,7 +202,8 @@ LatestSlot<StampedObservation> obs_slot;
 LatestSlot<TrackerOutput> est_slot;
 
 SimNode sim(cfg.sim, {obs_channel, gt_slot, obs_slot});
-TrackerNode tracker(make_unique<...>(...), obs_channel, est_slot, gt_slot, bullet_speed);
+TrackerNode tracker(make_unique<...>(...), obs_channel, est_slot, gt_slot,
+                    bullet_speed, cfg.sim.aimer, cfg.sim.planner);
 ```
 
 CLI：`sim_waggle [config.yaml]`，默认 `configs/sim_waggle.yaml`。
@@ -215,7 +227,13 @@ Host：`thirdparty/OmniScope/host/start.sh`，门户 `http://127.0.0.1:8080`。
 | `my_robot.chassis_w/vx/vy` | 同名 | 10, 0, 0 |
 | `my_robot.gimbal_offset` | `[dx,dy,dz]` m | (0.12,0,0)（文件里常为 0.05） |
 | `target_robot.init_pos/vel` | `target_init_pos/target_vel` | (3.5,0,0) / 0 |
-| `target_robot.radius/w/armor_num` | 同名 | 0.20 / 4 / 4 |
+| `target_robot.radius/l/h/w/armor_num` | 对侧 r；邻侧 r+l、z+h | 0.20 / 0.05 / 0.05 / 4 / 4 |
+| `simulation.bullet_speed` | `sim.bullet_speed` | 25 |
+| `aimer.yaw_offset/pitch_offset` | 度→rad | 0 |
+| `aimer.coming_angle/leaving_angle` | 度→rad | 55 / 20 |
+| `aimer.delay_time` | s | 0 |
+| `planner.max_yaw_acc / max_pitch_acc` | rad/s² | 50 / 100 |
+| `planner.Q_yaw / R_yaw / Q_pitch / R_pitch` | TinyMPC 权重 | `[9e6,0]` / `[1]` |
 | `measurement.enable_noise` | | true |
 | `measurement.noise_pos_std` | m | 0.005 |
 | `measurement.noise_yaw_std` | rad | 0.01 |
@@ -223,8 +241,6 @@ Host：`thirdparty/OmniScope/host/start.sh`，门户 `http://127.0.0.1:8080`。
 | `ekf.r_yaw / r_pitch / r_dist_base` | | 0.04 / 0.04 / 0.015 |
 | `ekf.p0` | 11 维对角 | `1,64,1,64,1,64,0.4,400,1e-5,1,1` |
 | `remote_logger.*` | `omniscope::RemoteLogger::Config` | 见 yaml |
-
-`bullet_speed` 在 `SimulationConfig`（默认 25）但 YAML 未暴露；要扫弹速就在本分支加字段。
 
 新算法参数：在 YAML 加独立节（如 `algo:`），只在 `load_config` + 该分支构造函数读取。
 
