@@ -24,6 +24,8 @@ public:
   explicit Aimer(AimerParams params = {});
 
   AimPoint choose_aim_point(const TargetEstimate & est);
+  /// 选板 + 一次弹道，无飞行时间迭代。给 Planner 时域采样。不可解则 valid=false。
+  AimPoint yaw_pitch(const TargetEstimate & est, double bullet_speed, Eigen::Vector2d & yp);
   GimbalCommand aim(TargetEstimate est, double bullet_speed);
 
 private:

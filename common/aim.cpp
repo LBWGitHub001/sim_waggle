@@ -116,6 +116,22 @@ AimPoint Aimer::choose_aim_point(const TargetEstimate & est)
   return {false, plates[0]};
 }
 
+AimPoint Aimer::yaw_pitch(const TargetEstimate & est, double bullet_speed, Eigen::Vector2d & yp)
+{
+  AimPoint pt = choose_aim_point(est);
+  if (!pt.valid) return pt;
+  const Eigen::Vector3d xyz = pt.xyza.head<3>();
+  const double d = std::hypot(xyz.x(), xyz.y());
+  const BulletTrajectory traj(bullet_speed, d, xyz.z());
+  if (traj.unsolvable) {
+    pt.valid = false;
+    return pt;
+  }
+  yp[0] = wrap_pi(std::atan2(xyz.y(), xyz.x()) + params_.yaw_offset);
+  yp[1] = -(traj.pitch + params_.pitch_offset);
+  return pt;
+}
+
 GimbalCommand Aimer::aim(TargetEstimate est, double bullet_speed)
 {
   GimbalCommand cmd;
