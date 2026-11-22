@@ -7,6 +7,7 @@
 
 #include <Eigen/Geometry>
 #include <omniscope/marker.hpp>
+#include <omniscope/omniscope.hpp>
 
 #include "frames.hpp"
 
@@ -214,7 +215,8 @@ SimNode::SimNode(const common::SimulationConfig & cfg, Topics topics)
 : cfg_(cfg),
   topics_(topics),
   kinematics_(cfg),
-  sensor_(cfg),
+  dist_pos_(0.0, cfg.noise_pos_std),
+  dist_yaw_(0.0, cfg.noise_yaw_std),
   dist_acc_(0.0, cfg.noise_acc_std)
 {
 }
@@ -255,16 +257,45 @@ void SimNode::run()
   finished_ = true;
 }
 
+common::ArmorObservation SimNode::observe(const common::GroundTruth & gt)
+{
+  common::ArmorObservation obs;
+  obs.name = "one";
+  obs.color = "blue";
+  obs.type = "small";
+  obs.confidence = 0.98;
+  obs.width = 0.135;
+  obs.height = 0.056;
+  obs.armor_id = gt.visible_armor_id;
+
+  const auto & armor_pos = gt.target.armors_pos[gt.visible_armor_id];
+  const double armor_yaw_odom = gt.target.armors_yaw[gt.visible_armor_id];
+
+  obs.xyz_in_gimbal = armor_pos - gt.gimbal.pos;
+  obs.xyz_in_world = armor_pos;
+  obs.yaw_raw = common::yaw_odom_to_gimbal(armor_yaw_odom, gt.gimbal);
+
+  if (cfg_.enable_noise) {
+    const Eigen::Vector3d noise(dist_pos_(rng_), dist_pos_(rng_), 0.0);
+    obs.xyz_in_gimbal += noise;
+    obs.yaw_raw += dist_yaw_(rng_);
+  }
+
+  const double d = obs.xyz_in_gimbal.norm();
+  const double yaw = std::atan2(obs.xyz_in_gimbal.y(), obs.xyz_in_gimbal.x());
+  const double pitch = std::atan2(obs.xyz_in_gimbal.z(), obs.xyz_in_gimbal.head<2>().norm());
+  obs.ypd_in_world = {yaw, pitch, d};
+  return obs;
+}
+
 void SimNode::publish(double sim_t, uint64_t frame)
 {
-  const auto & gt = kinematics_.ground_truth();
+  common::GroundTruth gt = kinematics_.ground_truth();
+  gt.t = sim_t;
   topics_.gt_out.set(gt);
 
-  const auto obs = sensor_.observe(gt);
-  common::StampedObservation msg;
-  msg.obs = obs;
-  msg.sim_t = sim_t;
-  msg.frame = frame;
+  const auto obs = observe(gt);
+  common::StampedObservation msg{obs, sim_t, frame};
   const Eigen::Vector3d a = kinematics_.origin_acc();
   const Eigen::Vector3d u_true(-a.x(), -a.y(), 0.0);
   Eigen::Vector3d u = u_true;
@@ -273,7 +304,6 @@ void SimNode::publish(double sim_t, uint64_t frame)
     u.y() += dist_acc_(acc_rng_);
   }
   msg.ego_acc = u;
-  topics_.obs_latest.set(msg);
   topics_.obs_out.push(msg);
 
   const common::TargetState enemy = common::express_target_in_gimbal(gt);

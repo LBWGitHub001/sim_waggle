@@ -1,14 +1,13 @@
 #include "math_tools.hpp"
 
 #include <cmath>
-#include <opencv2/core.hpp>  // CV_PI
 
 namespace tools
 {
 double limit_rad(double angle)
 {
-  while (angle > CV_PI) angle -= 2 * CV_PI;
-  while (angle <= -CV_PI) angle += 2 * CV_PI;
+  while (angle > M_PI) angle -= 2 * M_PI;
+  while (angle <= -M_PI) angle += 2 * M_PI;
   return angle;
 }
 
@@ -44,7 +43,7 @@ Eigen::Vector3d eulers(Eigen::Quaterniond q, int axis0, int axis1, int axis2, bo
 
   auto eps = 1e-7;
   auto safe1 = std::abs(eulers[1]) >= eps;
-  auto safe2 = std::abs(eulers[1] - CV_PI) >= eps;
+  auto safe2 = std::abs(eulers[1] - M_PI) >= eps;
   auto safe = safe1 && safe2;
   if (safe) {
     eulers[0] = half_sum + half_diff;
@@ -65,7 +64,7 @@ Eigen::Vector3d eulers(Eigen::Quaterniond q, int axis0, int axis1, int axis2, bo
 
   if (!is_proper) {
     eulers[2] *= sign;
-    eulers[1] -= CV_PI / 2;
+    eulers[1] -= M_PI / 2;
   }
 
   if (!extrinsic) std::swap(eulers[0], eulers[2]);

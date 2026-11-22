@@ -1,79 +1,58 @@
-#ifndef AUTO_AIM__TARGET_HPP
-#define AUTO_AIM__TARGET_HPP
+#ifndef TRACKER__TARGET_HPP
+#define TRACKER__TARGET_HPP
 
 #include <Eigen/Dense>
-#include <chrono>
-#include <optional>
-#include <queue>
-#include <string>
-#include <vector>
 
-#include "armor.hpp"
 #include "extended_kalman_filter.hpp"
+#include "types.hpp"
 
-namespace auto_aim
+namespace tracker
 {
 
-struct EkfParams {
-  double q_xyz_acc_var = 100.0;  // Q 矩阵：未建模加速度（z；xy 由控制量承担）
-  double q_yaw_acc_var = 75.0;   // Q 矩阵：角加速度方差
-  double m_ax = 1.0;             // M 对角：ax 方差 (m/s^2)^2，P += B M Bᵀ
-  double m_ay = 1.0;             // M 对角：ay 方差 (m/s^2)^2
-  double r_yaw = 4.0e-2;         // R 矩阵：yaw 观测噪声
-  double r_pitch = 4.0e-2;       // R 矩阵：pitch 观测噪声
-  double r_dist_base = 1.5e-2;   // R 矩阵：距离观测噪声基础值
+struct EkfParams
+{
+  double q_xyz_acc_var = 100.0;
+  double q_yaw_acc_var = 75.0;
+  double m_ax = 1.0;
+  double m_ay = 1.0;
+  double r_yaw = 0.04;
+  double r_pitch = 0.04;
+  double r_dist_base = 0.015;
 };
 
+/// 11 维 CV + 常角速度 EKF。观测 id 来自仿真，不做切板匹配。
+/// 调用序：predict(dt) → control(ego_acc) → update(obs)。
 class Target
 {
 public:
-  ArmorName name = ArmorName::one;
-  ArmorType armor_type = ArmorType::small;
-  ArmorPriority priority = ArmorPriority::first;
-  bool jumped = false;
-  int last_id = 0;  // debug only
-
   Target() = default;
-  Target(
-    const Armor & armor, std::chrono::steady_clock::time_point t, double radius, int armor_num,
-    Eigen::VectorXd P0_dig, EkfParams ekf_params);
-  Target(double x, double vyaw, double radius, double h);
+  Target(double radius, int armor_num, Eigen::VectorXd P0_dig, EkfParams ekf_params);
 
-  void predict(std::chrono::steady_clock::time_point t);
+  void init(const common::ArmorObservation & obs);
   void predict(double dt);
   void control(const Eigen::Vector3d & acc);
+  void update(const common::ArmorObservation & obs);
 
-  void update(const Armor & armor);
-
-  Eigen::VectorXd ekf_x() const;
-  const tools::ExtendedKalmanFilter & ekf() const;
-  std::vector<Eigen::Vector4d> armor_xyza_list() const;
-
-  bool diverged() const;
-  bool convergened();
-
-  bool isinit = false;
-  bool checkinit();
+  common::TargetEstimate estimate() const;
+  bool initialized() const { return initialized_; }
 
 private:
-  int armor_num_ = 4;
-  int switch_count_ = 0;
-  int update_count_ = 0;
-
-  bool is_switch_ = false;
-  bool is_converged_ = false;
-
-  tools::ExtendedKalmanFilter ekf_;
-  std::chrono::steady_clock::time_point t_;
-  EkfParams ekf_params_;
-  double last_dt_ = 0.0;
-
-  void update_ypda(const Armor & armor, int id);  // yaw pitch distance angle
+  void update_ypda(const common::ArmorObservation & obs, int id);
 
   Eigen::Vector3d h_armor_xyz(const Eigen::VectorXd & x, int id) const;
   Eigen::MatrixXd h_jacobian(const Eigen::VectorXd & x, int id) const;
+
+  int armor_id(const common::ArmorObservation & obs) const;
+
+  int armor_num_ = 4;
+  double radius_ = 0.20;
+  Eigen::VectorXd p0_dig_;
+  EkfParams ekf_params_;
+  tools::ExtendedKalmanFilter ekf_;
+  bool initialized_ = false;
+  double last_dt_ = 0.0;
 };
 
-}  // namespace auto_aim
+}  // namespace tracker
 
-#endif  // AUTO_AIM__TARGET_HPP
+#endif  // TRACKER__TARGET_HPP

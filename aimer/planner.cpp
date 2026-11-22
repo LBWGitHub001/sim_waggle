@@ -75,24 +75,27 @@ Planner::Horizon Planner::get_trajectory(TargetEstimate est, double yaw0, double
 {
   Horizon traj = Horizon::Zero();
 
-  est = propagate_estimate(est, -kPlannerDt * (kPlannerHalfHorizon + 1));
-  Eigen::Vector2d yp_last;
-  if (!aimer_.yaw_pitch(est, bullet_speed, yp_last).valid) {
+  Eigen::Vector2d yp_seed;
+  if (!aimer_.yaw_pitch(est, bullet_speed, yp_seed).valid) {
     throw std::runtime_error("unsolvable shooting yaw/pitch");
   }
 
+  auto sample_or_hold = [&](TargetEstimate & e, Eigen::Vector2d & yp, const Eigen::Vector2d & hold) {
+    if (!aimer_.yaw_pitch(e, bullet_speed, yp).valid) yp = hold;
+  };
+
+  est = propagate_estimate(est, -kPlannerDt * (kPlannerHalfHorizon + 1));
+  Eigen::Vector2d yp_last = yp_seed;
+  sample_or_hold(est, yp_last, yp_seed);
+
   est = propagate_estimate(est, kPlannerDt);
-  Eigen::Vector2d yp;
-  if (!aimer_.yaw_pitch(est, bullet_speed, yp).valid) {
-    throw std::runtime_error("unsolvable shooting yaw/pitch");
-  }
+  Eigen::Vector2d yp = yp_last;
+  sample_or_hold(est, yp, yp_last);
 
   for (int i = 0; i < kPlannerHorizon; i++) {
     est = propagate_estimate(est, kPlannerDt);
-    Eigen::Vector2d yp_next;
-    if (!aimer_.yaw_pitch(est, bullet_speed, yp_next).valid) {
-      throw std::runtime_error("unsolvable shooting yaw/pitch");
-    }
+    Eigen::Vector2d yp_next = yp;
+    sample_or_hold(est, yp_next, yp);
     const double yaw_vel = wrap_pi(yp_next[0] - yp_last[0]) / (2.0 * kPlannerDt);
     const double pitch_vel = (yp_next[1] - yp_last[1]) / (2.0 * kPlannerDt);
     traj.col(i) << wrap_pi(yp[0] - yaw0), yaw_vel, yp[1], pitch_vel;
