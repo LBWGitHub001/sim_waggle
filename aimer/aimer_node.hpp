@@ -11,7 +11,7 @@
 namespace aimer
 {
 
-/// 火控节点：消费 TrackerOutput FIFO，Aimer::aim 出无约束射击角，发 cmd_* / aim.lead。
+/// 火控节点：同一套 Aimer::aim(state) 分别吃 Kalman 与 GT，得到估计 cmd 与真值 cmd。
 class AimerNode
 {
 public:
@@ -29,9 +29,11 @@ public:
 
 private:
   void run();
+  common::GimbalCommand cmd_from_state(common::Aimer & aimer, const common::TargetEstimate & est);
   void publish_aim_markers(const Eigen::Vector3d & aim_lead_pt, uint64_t stamp_ns);
 
-  common::Aimer aimer_;
+  common::Aimer aimer_est_;
+  common::Aimer aimer_gt_;
   common::Channel<common::TrackerOutput> & est_in_;
   common::LatestSlot<common::GroundTruth> & gt_in_;
   common::LatestSlot<common::GimbalCommand> & cmd_out_;

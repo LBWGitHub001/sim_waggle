@@ -27,7 +27,8 @@ AimerNode::AimerNode(
   common::LatestSlot<common::GroundTruth> & gt_in,
   common::LatestSlot<common::GimbalCommand> & cmd_out,
   double bullet_speed)
-: aimer_(aimer),
+: aimer_est_(aimer),
+  aimer_gt_(aimer),
   est_in_(est_in),
   gt_in_(gt_in),
   cmd_out_(cmd_out),
@@ -43,6 +44,13 @@ void AimerNode::start()
 void AimerNode::join()
 {
   if (thread_.joinable()) thread_.join();
+}
+
+common::GimbalCommand AimerNode::cmd_from_state(
+  common::Aimer & aimer, const common::TargetEstimate & est)
+{
+  if (est.x.size() < 11) return {};
+  return aimer.aim(est, bullet_speed_);
 }
 
 void AimerNode::publish_aim_markers(const Eigen::Vector3d & aim_lead_pt, uint64_t stamp_ns)
@@ -83,38 +91,35 @@ void AimerNode::run()
   common::TrackerOutput msg;
 
   while (!stop_requested_.load() && est_in_.wait_pop(msg)) {
-    const auto & est = msg.est;
-    common::GimbalCommand cmd;
-    if (est.x.size() >= 11) {
-      cmd = aimer_.aim(est, bullet_speed_);
-    }
-    cmd_out_.set(cmd);
+    const common::GimbalCommand cmd_est = cmd_from_state(aimer_est_, msg.est);
+    cmd_out_.set(cmd_est);
 
-    if (cmd.valid) {
+    if (cmd_est.valid) {
       omniscope::plot({
-        {"cmd_target_yaw_deg", cmd.target_yaw * 180.0 / M_PI},
-        {"cmd_target_pitch_deg", cmd.target_pitch * 180.0 / M_PI},
-        {"cmd_yaw_deg", cmd.yaw * 180.0 / M_PI},
-        {"cmd_pitch_deg", cmd.pitch * 180.0 / M_PI},
-        {"cmd_yaw_vel", cmd.yaw_vel},
-        {"cmd_yaw_acc", cmd.yaw_acc},
-        {"cmd_pitch_vel", cmd.pitch_vel},
-        {"cmd_pitch_acc", cmd.pitch_acc},
-        {"cmd_fly_time", cmd.fly_time},
+        {"cmd_target_yaw_deg", cmd_est.target_yaw * 180.0 / M_PI},
+        {"cmd_target_pitch_deg", cmd_est.target_pitch * 180.0 / M_PI},
+        {"cmd_yaw_deg", cmd_est.yaw * 180.0 / M_PI},
+        {"cmd_pitch_deg", cmd_est.pitch * 180.0 / M_PI},
+        {"cmd_yaw_vel", cmd_est.yaw_vel},
+        {"cmd_yaw_acc", cmd_est.yaw_acc},
+        {"cmd_pitch_vel", cmd_est.pitch_vel},
+        {"cmd_pitch_acc", cmd_est.pitch_acc},
+        {"cmd_fly_time", cmd_est.fly_time},
       }, msg.stamp_ns);
-      publish_aim_markers(cmd.aim_xyz, msg.stamp_ns);
+      publish_aim_markers(cmd_est.aim_xyz, msg.stamp_ns);
     }
 
     common::GroundTruth gt;
     if (gt_in_.get(gt)) {
-      const common::GimbalCommand true_cmd =
-        common::aim_from_ground_truth(gt, aimer_.params(), bullet_speed_);
+      const common::TargetEstimate gt_est = common::estimate_from_ground_truth(gt);
+      const common::GimbalCommand cmd_true = cmd_from_state(aimer_gt_, gt_est);
       omniscope::plot({
         {"true_camera_yaw_deg", gt.camera.yaw * 180.0 / M_PI},
       }, msg.stamp_ns);
-      if (true_cmd.valid) {
+      if (cmd_true.valid) {
         omniscope::plot({
-          {"true_aim_yaw_deg", true_cmd.yaw * 180.0 / M_PI},
+          {"true_aim_yaw_deg", cmd_true.yaw * 180.0 / M_PI},
+          {"true_aim_pitch_deg", cmd_true.pitch * 180.0 / M_PI},
         }, msg.stamp_ns);
       }
     }

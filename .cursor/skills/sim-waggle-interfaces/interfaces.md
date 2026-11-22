@@ -142,7 +142,7 @@ AimerNode(AimerParams,
           LatestSlot<GimbalCommand>&, bullet_speed=25)
 ```
 
-`cmd = aimer.aim(est, bullet_speed)`。`true_aim_yaw_deg` 来自 `aim_from_ground_truth`：gimbal 系 GT + delay，固定当前可见板，迭代弹道飞行时间后再 `atan2`。发带 `msg.stamp_ns` 的 `cmd_*`、`true_camera_yaw_deg` / `true_aim_yaw_deg`、`aim.lead` Marker。禁止再 `now_ns()`。
+同一套 `Aimer::aim(state)`：Kalman `msg.est` → `cmd_est`（写 `cmd_out`）；`estimate_from_ground_truth(gt)` → `cmd_true`。两套 Aimer 实例，选板 lock 互不污染。发带 `msg.stamp_ns` 的 `cmd_*`、`true_camera_yaw_deg` / `true_aim_*`、`aim.lead` Marker。禁止再 `now_ns()`。
 
 ## 5. `app/` 接线
 

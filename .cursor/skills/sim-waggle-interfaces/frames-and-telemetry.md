@@ -82,7 +82,7 @@ cmd_yaw_vel/acc          rad/s, rad/s²
 cmd_pitch_vel/acc
 cmd_fly_time             s
 true_camera_yaw_deg      deg   GT look-at
-true_aim_yaw_deg         deg   GT 可见板 + 弹道飞行时间外推后的 atan2
+true_aim_yaw/pitch_deg   deg   同一套 `aim(state)` 吃 GT 状态得到的射击角
 ```
 
 分支上可另 `plot` 新键。禁止改名已有键。禁止在 main 里 `plot`。

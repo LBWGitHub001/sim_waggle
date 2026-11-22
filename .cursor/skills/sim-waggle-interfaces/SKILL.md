@@ -101,7 +101,7 @@ estimate() -> TargetEstimate
 | `LatestSlot<T>` | keep_last(1) |
 | `SimNode` | fps 推进；先发 t=0；话题：`obs_out` / `gt_out`；观测 RNG 种子 42 |
 | `TrackerNode` | 直接持有 `tracker::Target`；消费 FIFO；读 `gt_in` 做误差；写 `est_out`；发 `kal_*`/`err_*`/Kalman Marker |
-| `AimerNode` | 直接持有 `Aimer`；`aim(est)` 出无约束射击角；写 `cmd_out`；发 `cmd_*` 与 `aim.lead` |
+| `AimerNode` | `cmd_from_state`：Kalman 与 GT 各走一遍 `Aimer::aim`；`cmd_out` 只发估计；plot `cmd_*` / `true_aim_*` |
 | 收尾 | `sim.stop(); sim.join(); tracker.join(); aimer.join();`（sim 关 obs 通道，tracker 关 est 通道） |
 
 仿真时钟 `sim_t = frame * dt`，与墙钟无关。
