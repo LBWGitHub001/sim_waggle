@@ -6,8 +6,6 @@
 #include <omniscope/marker.hpp>
 #include <omniscope/omniscope.hpp>
 
-#include "frames.hpp"
-
 namespace aimer
 {
 namespace
@@ -104,17 +102,13 @@ void AimerNode::run()
 
     common::GroundTruth gt;
     if (gt_in_.get(gt)) {
-      const common::TargetState enemy_g = common::express_target_in_gimbal(gt);
-      double true_aim_yaw = 0.0;
-      if (gt.visible_armor_id >= 0 &&
-          gt.visible_armor_id < static_cast<int>(enemy_g.armors_pos.size())) {
-        const Eigen::Vector3d & p = enemy_g.armors_pos[static_cast<size_t>(gt.visible_armor_id)];
-        true_aim_yaw = std::atan2(p.y(), p.x());
+      const common::GimbalCommand true_cmd =
+        common::aim_from_ground_truth(gt, aimer_.params(), bullet_speed_);
+      if (true_cmd.valid) {
+        omniscope::plot({
+          {"true_aim_yaw_deg", true_cmd.yaw * 180.0 / M_PI},
+        }, msg.stamp_ns);
       }
-      omniscope::plot({
-        {"true_camera_yaw_deg", gt.camera.yaw * 180.0 / M_PI},
-        {"true_aim_yaw_deg", true_aim_yaw * 180.0 / M_PI},
-      }, msg.stamp_ns);
     }
   }
 

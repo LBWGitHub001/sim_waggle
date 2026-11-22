@@ -17,6 +17,10 @@ TargetEstimate propagate_estimate(const TargetEstimate & est, double dt);
 
 Eigen::Vector3d h_armor_xyz(const Eigen::VectorXd & x, int id, int armor_num);
 
+/// 真值瞄准：gimbal 系 GT 状态 + delay，再按可见板迭代弹道飞行时间，取外推后的板位。
+GimbalCommand aim_from_ground_truth(
+  const GroundTruth & gt, const AimerParams & params, double bullet_speed);
+
 /// 弹道 Aimer：coming/leaving 选板 + 飞行时间迭代。输出无约束射击角。
 class Aimer
 {
@@ -27,6 +31,7 @@ public:
   /// 选板 + 一次弹道，无飞行时间迭代。不可解则 valid=false。
   AimPoint yaw_pitch(const TargetEstimate & est, double bullet_speed, Eigen::Vector2d & yp);
   GimbalCommand aim(TargetEstimate est, double bullet_speed);
+  const AimerParams & params() const { return params_; }
 
 private:
   AimerParams params_;

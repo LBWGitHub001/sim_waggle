@@ -61,6 +61,82 @@ TargetEstimate propagate_estimate(const TargetEstimate & est_in, double dt)
   return est;
 }
 
+namespace
+{
+TargetEstimate estimate_from_gimbal_target(const TargetState & enemy)
+{
+  TargetEstimate est;
+  est.x = Eigen::VectorXd::Zero(11);
+  est.x[0] = enemy.center.x();
+  est.x[1] = enemy.vel.x();
+  est.x[2] = enemy.center.y();
+  est.x[3] = enemy.vel.y();
+  est.x[4] = enemy.center.z();
+  est.x[5] = enemy.vel.z();
+  est.x[6] = enemy.yaw;
+  est.x[7] = enemy.w;
+  est.x[8] = enemy.radius;
+  est.x[9] = enemy.l;
+  est.x[10] = enemy.h;
+  est.armor_num = enemy.armor_num > 0 ? enemy.armor_num : 4;
+  est.jumped = true;
+  fill_derived(est);
+  return est;
+}
+
+GimbalCommand ballistic_aim_armor(
+  TargetEstimate est, int armor_id, const AimerParams & params, double bullet_speed)
+{
+  GimbalCommand cmd;
+  if (est.x.size() < 11) return cmd;
+  if (bullet_speed < 14.0) bullet_speed = 23.0;
+  if (params.delay_time > 0.0) est = propagate_estimate(est, params.delay_time);
+
+  auto plate_xyz = [&](const TargetEstimate & e) -> Eigen::Vector3d {
+    if (armor_id >= 0 && armor_id < static_cast<int>(e.armor_xyza_list.size())) {
+      return e.armor_xyza_list[static_cast<size_t>(armor_id)].head<3>();
+    }
+    return e.center;
+  };
+
+  const Eigen::Vector3d xyz0 = plate_xyz(est);
+  const double d0 = std::hypot(xyz0.x(), xyz0.y());
+  BulletTrajectory traj0(bullet_speed, d0, xyz0.z());
+  if (traj0.unsolvable) return cmd;
+
+  double prev_fly_time = traj0.fly_time;
+  BulletTrajectory current_traj = traj0;
+  Eigen::Vector3d final_xyz = xyz0;
+  for (int iter = 0; iter < 10; ++iter) {
+    const TargetEstimate pred = propagate_estimate(est, prev_fly_time);
+    final_xyz = plate_xyz(pred);
+    const double d = std::hypot(final_xyz.x(), final_xyz.y());
+    current_traj = BulletTrajectory(bullet_speed, d, final_xyz.z());
+    if (current_traj.unsolvable) return cmd;
+    if (std::abs(current_traj.fly_time - prev_fly_time) < 0.001) break;
+    prev_fly_time = current_traj.fly_time;
+  }
+
+  cmd.valid = true;
+  cmd.aim_xyz = final_xyz;
+  cmd.fly_time = current_traj.fly_time;
+  cmd.target_yaw = wrap_pi(std::atan2(final_xyz.y(), final_xyz.x()) + params.yaw_offset);
+  cmd.target_pitch = -(current_traj.pitch + params.pitch_offset);
+  cmd.yaw = cmd.target_yaw;
+  cmd.pitch = cmd.target_pitch;
+  return cmd;
+}
+}  // namespace
+
+GimbalCommand aim_from_ground_truth(
+  const GroundTruth & gt, const AimerParams & params, double bullet_speed)
+{
+  const TargetState enemy = express_target_in_gimbal(gt);
+  const int id = gt.visible_armor_id;
+  if (id < 0 || id >= enemy.armor_num) return {};
+  return ballistic_aim_armor(estimate_from_gimbal_target(enemy), id, params, bullet_speed);
+}
+
 Aimer::Aimer(AimerParams params) : params_(params) {}
 
 AimPoint Aimer::choose_aim_point(const TargetEstimate & est)
