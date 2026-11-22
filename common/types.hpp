@@ -153,12 +153,48 @@ struct MetricsResult
   double max_vel = 0.0;
 };
 
+// 云台命令：target_* 为无约束射击角，yaw/pitch 为 TinyMPC 可行角
+struct GimbalCommand
+{
+  bool valid = false;
+  double target_yaw = 0.0;
+  double target_pitch = 0.0;
+  double yaw = 0.0;
+  double pitch = 0.0;
+  double yaw_vel = 0.0;
+  double yaw_acc = 0.0;
+  double pitch_vel = 0.0;
+  double pitch_acc = 0.0;
+  double fly_time = 0.0;
+  Eigen::Vector3d aim_xyz = Eigen::Vector3d::Zero();
+};
+
+struct AimerParams
+{
+  double yaw_offset = 0.0;   // rad
+  double pitch_offset = 0.0; // rad
+  double coming_angle = 55.0 * M_PI / 180.0;
+  double leaving_angle = 20.0 * M_PI / 180.0;
+  double delay_time = 0.0;
+};
+
+struct PlannerParams
+{
+  double max_yaw_acc = 50.0;
+  Eigen::Vector2d Q_yaw{9.0e6, 0.0};
+  double R_yaw = 1.0;
+  double max_pitch_acc = 100.0;
+  Eigen::Vector2d Q_pitch{9.0e6, 0.0};
+  double R_pitch = 1.0;
+};
+
 // /target_estimate 话题（TrackerNode 发布 → 可视化读取）
 struct TrackerOutput
 {
   TargetEstimate est;
   double sim_t = 0.0;
   MetricsResult metrics;
+  GimbalCommand cmd;
 };
 
 // 8. 仿真系统参数配置
@@ -188,6 +224,9 @@ struct SimulationConfig
   int fps = 50;
   double duration = 0.0; // 0: 无限循环
   double bullet_speed = 25.0; // m/s
+
+  AimerParams aimer;
+  PlannerParams planner;
 };
 
 }  // namespace common
