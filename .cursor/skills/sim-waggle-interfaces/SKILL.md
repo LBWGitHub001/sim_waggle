@@ -106,6 +106,12 @@ estimate() -> TargetEstimate
 
 仿真时钟 `sim_t = frame * dt`，与墙钟无关。
 
+## 时间戳（数据时钟 = 仿真）
+
+`SimNode::publish` 对本帧打一次 `omniscope::now_ns()`（本机 Unix ns），写入 `StampedObservation.stamp_ns`。TrackerNode 把它拷到 `TrackerOutput.stamp_ns`。同一帧的观测、滤波、火控和所有 `plot` / `plot_markers` / `plot_tfs` 都走带 `t_mark_ns` 的重载。**下游禁止再调用 `now_ns()`。**
+
+SDK 出口仍写 `ts` = 发布时间。Host Watch 绘图下拉默认 **标记时间戳**（对齐同帧曲线）；切 **发布时间戳** 可看管道延迟。`t_mark` 不是曲线通道。
+
 ## YAML（`configs/sim_waggle.yaml`）
 
 `app/main.cpp::load_config()` 一处解析。节：`simulation` / `my_robot` / `target_robot` / `measurement` / `aimer` / `ekf` / `remote_logger`。字段表见 [interfaces.md](interfaces.md)。

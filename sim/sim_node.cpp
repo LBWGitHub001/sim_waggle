@@ -68,16 +68,16 @@ omniscope::TransformStamped make_tf(
   return tf;
 }
 
-void publish_tfs(const common::GroundTruth & gt)
+void publish_tfs(const common::GroundTruth & gt, uint64_t stamp_ns)
 {
   omniscope::plot_tfs({
     make_tf("odom", "gimbal", gt.gimbal.pos, gt.gimbal.yaw),
     make_tf("gimbal", "camera", Eigen::Vector3d::Zero(), gt.camera.yaw),
     make_tf("odom", "robot", gt.target.center, gt.target.yaw),
-  });
+  }, stamp_ns);
 }
 
-void publish_gt_markers(const common::GroundTruth & gt)
+void publish_gt_markers(const common::GroundTruth & gt, uint64_t stamp_ns)
 {
   std::vector<omniscope::Marker> markers;
   markers.reserve(20);
@@ -207,7 +207,7 @@ void publish_gt_markers(const common::GroundTruth & gt)
     markers.push_back(m);
   }
 
-  omniscope::plot_markers(markers);
+  omniscope::plot_markers(markers, stamp_ns);
 }
 }  // namespace
 
@@ -290,12 +290,13 @@ common::ArmorObservation SimNode::observe(const common::GroundTruth & gt)
 
 void SimNode::publish(double sim_t, uint64_t frame)
 {
+  const uint64_t stamp_ns = omniscope::now_ns();
   common::GroundTruth gt = kinematics_.ground_truth();
   gt.t = sim_t;
   topics_.gt_out.set(gt);
 
   const auto obs = observe(gt);
-  common::StampedObservation msg{obs, sim_t, frame};
+  common::StampedObservation msg{obs, sim_t, frame, stamp_ns};
   const Eigen::Vector3d a = kinematics_.origin_acc();
   const Eigen::Vector3d u_true(-a.x(), -a.y(), 0.0);
   Eigen::Vector3d u = u_true;
@@ -319,12 +320,12 @@ void SimNode::publish(double sim_t, uint64_t frame)
     {"obs_armor_x", obs.xyz_in_gimbal.x()},
     {"obs_armor_y", obs.xyz_in_gimbal.y()},
     {"obs_armor_z", obs.xyz_in_gimbal.z()},
-  });
+  }, stamp_ns);
   omniscope::plot({
     {"true_center_x", enemy.center.x()},
     {"true_center_y", enemy.center.y()},
     {"true_center_z", enemy.center.z()},
-  });
+  }, stamp_ns);
   omniscope::plot({
     {"obs_armor_yaw_deg", obs.yaw_raw * 180.0 / M_PI},
     {"obs_w_ego", gt.chassis.w},
@@ -340,16 +341,16 @@ void SimNode::publish(double sim_t, uint64_t frame)
     {"true_w_ego", gt.chassis.w},
     {"ego_acc_x", msg.ego_acc.x()},
     {"ego_acc_y", msg.ego_acc.y()},
-  });
+  }, stamp_ns);
   omniscope::plot({
     {"u_true_x", u_true.x()},
     {"u_true_y", u_true.y()},
     {"u_x", u.x()},
     {"u_y", u.y()},
-  });
+  }, stamp_ns);
 
-  publish_tfs(gt);
-  publish_gt_markers(gt);
+  publish_tfs(gt, stamp_ns);
+  publish_gt_markers(gt, stamp_ns);
 }
 
 }  // namespace sim

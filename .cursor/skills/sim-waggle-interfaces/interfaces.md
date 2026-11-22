@@ -16,10 +16,10 @@
 | `ArmorObservation` | 见下 | 工作系 gimbal |
 | `TargetEstimate` | 见下 | gimbal |
 | `MetricsResult` | `err_*` / rms | gimbal；定义在 `types.hpp` |
-| `StampedObservation` | `obs, sim_t, frame`（`exp/ego-acc` 另有 `ego_acc`） | SimNode → TrackerNode |
+| `StampedObservation` | `obs, sim_t, frame, stamp_ns`（`exp/ego-acc` 另有 `ego_acc`） | SimNode → TrackerNode |
 | `GimbalCommand` | `valid, target_yaw/pitch, yaw/pitch, *vel/*acc, fly_time, aim_xyz` | gimbal；无 `shoot` |
 | `AimerParams` | 偏移、coming/leaving、delay | — |
-| `TrackerOutput` | `est, sim_t, metrics`（**不含 cmd**） | TrackerNode → AimerNode |
+| `TrackerOutput` | `est, sim_t, stamp_ns, metrics`（**不含 cmd**） | TrackerNode → AimerNode |
 | `SimulationConfig` | 见 YAML 映射 | — |
 
 `ArmorObservation`：
@@ -96,7 +96,7 @@ SimNode(SimulationConfig, Topics)
 start() / stop() / join() / finished() / frames_published()
 ```
 
-循环：先 `publish(0, 0)` → `step(dt)` → `publish(frame*dt, frame)`。`duration>0` 到点退出并 `obs_out.close()`。`publish` 发 gimbal 系 `obs_*`/`true_*`、`plot_tfs`、`my_robot.*`/`robot.armor` Marker。
+循环：先 `publish(0, 0)` → `step(dt)` → `publish(frame*dt, frame)`。`duration>0` 到点退出并 `obs_out.close()`。`publish` 打一次 `stamp_ns = omniscope::now_ns()`，随观测发出；本帧 `obs_*`/`true_*`、`plot_tfs`、`my_robot.*`/`robot.armor` 都带这个 `t_mark`。
 
 ## 3. `tracker/` — 滤波
 
@@ -130,7 +130,7 @@ TrackerNode(radius, armor_num, EkfParams, p0,
 start() / stop() / join() / finished()
 ```
 
-每帧 `estimate()` 后 `express_target_in_gimbal` + `SimulationMetrics::update`，push `TrackerOutput`，发 `kal_*`/`err_*` 与 Kalman Marker。退出时 `est_out.close()`。
+每帧 `estimate()` 后 `express_target_in_gimbal` + `SimulationMetrics::update`，把 `msg.stamp_ns` 拷进 `TrackerOutput`，发带 `t_mark` 的 `kal_*`/`err_*` 与 Kalman Marker。禁止再 `now_ns()`。退出时 `est_out.close()`。
 
 ## 4. `aimer/` — 火控
 
@@ -142,7 +142,7 @@ AimerNode(AimerParams,
           LatestSlot<GimbalCommand>&, bullet_speed=25)
 ```
 
-`cmd = aimer.aim(est, bullet_speed)`。发 `cmd_*`、`true_camera_yaw_deg` / `true_aim_yaw_deg`、`aim.lead` Marker。
+`cmd = aimer.aim(est, bullet_speed)`。发带 `msg.stamp_ns` 的 `cmd_*`、`true_camera_yaw_deg` / `true_aim_yaw_deg`、`aim.lead` Marker。禁止再 `now_ns()`。
 
 ## 5. `app/` 接线
 
