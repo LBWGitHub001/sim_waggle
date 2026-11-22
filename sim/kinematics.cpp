@@ -43,6 +43,8 @@ void KinematicsEngine::reset()
   gt_.target.center = cfg_.target_init_pos;
   gt_.target.vel = cfg_.target_vel;
   gt_.target.radius = cfg_.target_radius;
+  gt_.target.l = cfg_.target_l;
+  gt_.target.h = cfg_.target_h;
   gt_.target.armor_num = cfg_.armor_num;
   gt_.target.armors_pos.resize(cfg_.armor_num);
   gt_.target.armors_yaw.resize(cfg_.armor_num);
@@ -107,8 +109,10 @@ void KinematicsEngine::update_armors()
   const Eigen::Matrix3d R_robot2odom = rot_z(gt_.target.yaw);
   const int n = cfg_.armor_num;
   const double r = cfg_.target_radius;
+  const double l = cfg_.target_l;
+  const double h = cfg_.target_h;
   for (int i = 0; i < n; i++) {
-    const Eigen::Vector3d p_robot = common::armor_in_robot(i, n, r);
+    const Eigen::Vector3d p_robot = common::armor_in_robot(i, n, r, l, h);
     gt_.target.armors_pos[i] = gt_.target.center + R_robot2odom * p_robot;
     gt_.target.armors_yaw[i] = limit_rad(gt_.target.yaw + common::armor_yaw_in_robot(i, n));
   }

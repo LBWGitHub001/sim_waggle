@@ -77,6 +77,10 @@ common::TargetEstimate BaselineTracker::estimate() const
     est.yaw = x[6];
     est.w = x[7];
     est.radius = x[8];
+    est.l = x[9];
+    est.h = x[10];
+    est.jumped = target_->jumped;
+    est.armor_num = armor_num_;
     est.armor_xyza_list = target_->armor_xyza_list();
     est.last_nis = target_->ekf().last_nis;
     est.diverged = target_->diverged();

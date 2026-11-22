@@ -186,9 +186,9 @@ void publish_gt_markers(const common::GroundTruth & gt)
   }
 
   const int n = gt.target.armor_num;
-  const double radius = gt.target.radius;
   for (int i = 0; i < n; i++) {
-    const Eigen::Vector3d p = common::armor_in_robot(i, n, radius);
+    const Eigen::Vector3d p =
+      common::armor_in_robot(i, n, gt.target.radius, gt.target.l, gt.target.h);
     const double yaw_i = common::armor_yaw_in_robot(i, n);
     omniscope::Marker m;
     m.frame_id = "robot";

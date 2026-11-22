@@ -61,6 +61,8 @@ AppConfig load_config(const std::string & path)
     auto vel = tr["vel"].as<std::vector<double>>();
     cfg.sim.target_vel = Eigen::Vector3d(vel[0], vel[1], vel[2]);
     cfg.sim.target_radius = tr["radius"].as<double>(0.20);
+    cfg.sim.target_l = tr["l"].as<double>(0.05);
+    cfg.sim.target_h = tr["h"].as<double>(0.05);
     cfg.sim.target_w = tr["w"].as<double>(4.0);
     cfg.sim.armor_num = tr["armor_num"].as<int>(4);
   }

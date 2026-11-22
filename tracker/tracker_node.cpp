@@ -197,9 +197,12 @@ void TrackerNode::run()
     auto target = tracker_->estimate();
 
     common::GroundTruth gt;
-    if (gt_in_.get(gt) && target.x.size() >= 11) {
+    common::TargetState enemy_g;
+    bool have_gt = gt_in_.get(gt);
+    if (have_gt && target.x.size() >= 11) {
       common::GroundTruth gt_g = gt;
       gt_g.target = common::express_target_in_gimbal(gt);
+      enemy_g = gt_g.target;
       metrics_.update(gt_g, target, bullet_speed_);
     }
     const common::MetricsResult & metrics = metrics_.latest();
@@ -221,7 +224,15 @@ void TrackerNode::run()
         {"kal_yaw_deg", target.yaw * 180.0 / M_PI},
         {"kal_w", target.w},
         {"kal_radius_mm", target.radius * 1000.0},
+        {"kal_l_mm", target.l * 1000.0},
+        {"kal_h_mm", target.h * 1000.0},
       });
+      if (have_gt) {
+        omniscope::plot({
+          {"true_l_mm", enemy_g.l * 1000.0},
+          {"true_h_mm", enemy_g.h * 1000.0},
+        });
+      }
       omniscope::plot({
         {"err_x", metrics.err_x},
         {"err_y", metrics.err_y},
@@ -234,6 +245,8 @@ void TrackerNode::run()
         {"err_yaw_deg", metrics.err_yaw * 180.0 / M_PI},
         {"err_w", metrics.err_w},
         {"err_r_mm", metrics.err_r * 1000.0},
+        {"err_l_mm", metrics.err_l * 1000.0},
+        {"err_h_mm", metrics.err_h * 1000.0},
         {"err_pos", metrics.pos_err_norm},
         {"err_vel", metrics.vel_err_norm},
       });

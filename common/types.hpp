@@ -57,7 +57,9 @@ struct TargetState
   Eigen::Vector3d vel = Eigen::Vector3d::Zero();
   double yaw = 0.0;
   double w = 0.0; // 自转角速度 (rad/s)
-  double radius = 0.20;
+  double radius = 0.20; // 对侧装甲半径 r（id 0,2）
+  double l = 0.0;       // 邻侧半径增量：id 1,3 半径 = r+l
+  double h = 0.0;       // 邻侧相对车心的 z 偏置
   int armor_num = 4;
   std::vector<Eigen::Vector3d> armors_pos;
   std::vector<double> armors_yaw;
@@ -101,6 +103,10 @@ struct TargetEstimate
   double yaw = 0.0;
   double w = 0.0;
   double radius = 0.20;
+  double l = 0.0; // x[9] = r2-r1
+  double h = 0.0; // x[10] = z2-z1
+  bool jumped = false;
+  int armor_num = 4;
   std::vector<Eigen::Vector4d> armor_xyza_list; // 4 块拟合装甲板 [x, y, z, yaw]
   double last_nis = 0.0;
   bool diverged = false;
@@ -127,6 +133,8 @@ struct MetricsResult
   double err_yaw = 0.0; // rad, (-pi, pi]
   double err_w = 0.0;   // rad/s
   double err_r = 0.0;   // m
+  double err_l = 0.0;   // m
+  double err_h = 0.0;   // m
 
   double pos_err_norm = 0.0;
   double vel_err_norm = 0.0;
@@ -166,6 +174,8 @@ struct SimulationConfig
   Eigen::Vector3d target_init_pos{3.5, 0.0, 0.0};
   Eigen::Vector3d target_vel{0.0, 0.0, 0.0};
   double target_radius = 0.20;
+  double target_l = 0.05; // 邻侧半径增量
+  double target_h = 0.05; // 邻侧 z 偏置
   double target_w = 4.0;
   int armor_num = 4;
 

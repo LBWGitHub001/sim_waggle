@@ -13,7 +13,9 @@ my_robot:
 target_robot:
   init_pos: [3.5, 0.0, 0.0]       # 目标初始空间坐标 [x, y, z] (m)
   vel: [0.0, 0.0, 0.0]            # 目标真实平移速度 [vx, vy, vz] (m/s)
-  radius: 0.20                    # 装甲板旋转半径 (m)
+  radius: 0.20                    # 对侧装甲半径 r，id 0/2 (m)
+  l: 0.05                         # 邻侧半径增量：id 1/3 半径 = r+l (m)
+  h: 0.05                         # 邻侧相对车心的 z 偏置 (m)
   w: 7.0                          # 目标自转角速度 (rad/s)
   armor_num: 4                    # 装甲板数量
 
