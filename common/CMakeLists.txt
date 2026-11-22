@@ -15,4 +15,5 @@ target_include_directories(omni_common PUBLIC
 
 target_link_libraries(omni_common PUBLIC
   Eigen3::Eigen
+  tinympcstatic
 )
