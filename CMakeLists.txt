@@ -25,7 +25,7 @@ else()
   include(FetchContent)
   FetchContent_Declare(
     omniscope
-    GIT_REPOSITORY https://github.com/LBWGitHub001/OmniScope.git
+    GIT_REPOSITORY https://github.com/nuaa-rm/OmniScope.git
     GIT_TAG main
     SOURCE_SUBDIR sdk
   )
