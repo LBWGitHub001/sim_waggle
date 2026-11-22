@@ -79,7 +79,7 @@ void TrackerNode::join()
   if (thread_.joinable()) thread_.join();
 }
 
-void TrackerNode::publish_kalman_markers(const common::TargetEstimate & est)
+void TrackerNode::publish_kalman_markers(const common::TargetEstimate & est, uint64_t stamp_ns)
 {
   std::vector<omniscope::Marker> markers;
   markers.reserve(16);
@@ -153,7 +153,7 @@ void TrackerNode::publish_kalman_markers(const common::TargetEstimate & est)
     markers.push_back(m);
   }
 
-  omniscope::plot_markers(markers);
+  omniscope::plot_markers(markers, stamp_ns);
 }
 
 void TrackerNode::run()
@@ -186,6 +186,7 @@ void TrackerNode::run()
     common::TrackerOutput out;
     out.est = target;
     out.sim_t = msg.sim_t;
+    out.stamp_ns = msg.stamp_ns;
     out.metrics = metrics;
     est_out_.push(out);
 
@@ -202,18 +203,18 @@ void TrackerNode::run()
         {"kal_radius_mm", target.radius * 1000.0},
         {"kal_l_mm", target.l * 1000.0},
         {"kal_h_mm", target.h * 1000.0},
-      });
+      }, msg.stamp_ns);
       if (have_gt) {
         omniscope::plot({
           {"true_l_mm", enemy_g.l * 1000.0},
           {"true_h_mm", enemy_g.h * 1000.0},
-        });
+        }, msg.stamp_ns);
       }
       omniscope::plot({
         {"err_x", metrics.err_x},
         {"err_y", metrics.err_y},
         {"err_z", metrics.err_z},
-      });
+      }, msg.stamp_ns);
       omniscope::plot({
         {"err_vx", metrics.err_vx},
         {"err_vy", metrics.err_vy},
@@ -225,8 +226,8 @@ void TrackerNode::run()
         {"err_h_mm", metrics.err_h * 1000.0},
         {"err_pos", metrics.pos_err_norm},
         {"err_vel", metrics.vel_err_norm},
-      });
-      publish_kalman_markers(target);
+      }, msg.stamp_ns);
+      publish_kalman_markers(target, msg.stamp_ns);
     }
   }
 

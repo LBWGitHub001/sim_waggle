@@ -47,7 +47,7 @@ void AimerNode::join()
   if (thread_.joinable()) thread_.join();
 }
 
-void AimerNode::publish_aim_markers(const Eigen::Vector3d & aim_lead_pt)
+void AimerNode::publish_aim_markers(const Eigen::Vector3d & aim_lead_pt, uint64_t stamp_ns)
 {
   std::vector<omniscope::Marker> markers;
   const Eigen::Vector3d zero = Eigen::Vector3d::Zero();
@@ -77,7 +77,7 @@ void AimerNode::publish_aim_markers(const Eigen::Vector3d & aim_lead_pt)
     markers.push_back(m);
   }
 
-  omniscope::plot_markers(markers);
+  omniscope::plot_markers(markers, stamp_ns);
 }
 
 void AimerNode::run()
@@ -103,8 +103,8 @@ void AimerNode::run()
         {"cmd_pitch_vel", cmd.pitch_vel},
         {"cmd_pitch_acc", cmd.pitch_acc},
         {"cmd_fly_time", cmd.fly_time},
-      });
-      publish_aim_markers(cmd.aim_xyz);
+      }, msg.stamp_ns);
+      publish_aim_markers(cmd.aim_xyz, msg.stamp_ns);
     }
 
     common::GroundTruth gt;
@@ -119,7 +119,7 @@ void AimerNode::run()
       omniscope::plot({
         {"true_camera_yaw_deg", gt.camera.yaw * 180.0 / M_PI},
         {"true_aim_yaw_deg", true_aim_yaw * 180.0 / M_PI},
-      });
+      }, msg.stamp_ns);
     }
   }
 

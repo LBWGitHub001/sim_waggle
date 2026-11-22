@@ -29,7 +29,7 @@ public:
 
 private:
   void run();
-  void publish_aim_markers(const Eigen::Vector3d & aim_lead_pt);
+  void publish_aim_markers(const Eigen::Vector3d & aim_lead_pt, uint64_t stamp_ns);
 
   common::Aimer aimer_;
   common::Channel<common::TrackerOutput> & est_in_;

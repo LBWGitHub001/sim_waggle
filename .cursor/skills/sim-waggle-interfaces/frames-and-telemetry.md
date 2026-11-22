@@ -24,7 +24,7 @@ RNG 种子 42。要看场地上敌车几乎静止：Host 3D 查看系切到 `odo
 
 ## 谁发什么
 
-`omniscope::plot` / `plot_markers` / `plot_tfs` / `plot_image` **禁止写在 main**。
+`omniscope::plot` / `plot_markers` / `plot_tfs` / `plot_image` **禁止写在 main**。本帧遥测一律带 `SimNode` 的 `stamp_ns`（`t_mark`）；Watch 默认按标记时间轴对齐，切发布时间轴可看处理延迟。
 
 | 量 | 发布点 | 系 |
 |---|---|---|

@@ -54,6 +54,7 @@ git checkout -b exp/<short-name>
 1. 在 `StampedObservation` 末尾加字段（带默认值）
 2. `SimNode::publish` 从 `gt.gimbal` / `gt.chassis` 填写
 3. 在本分支的 `TrackerNode::run` 里把新字段交给 `Target::control` 等，不要为此引入包装类
+4. 新 `plot` 必须用 `msg.stamp_ns` 的 `t_mark` 重载，不要 `omniscope::now_ns()`
 
 构造期常量可以直接从 YAML 注入，不必走消息。时变量必须走消息。
 

@@ -109,6 +109,7 @@ struct StampedObservation
   ArmorObservation obs;
   double sim_t = 0.0;
   uint64_t frame = 0;
+  uint64_t stamp_ns = 0;  // SimNode 本帧 omniscope::now_ns()，下游 plot 必须复用
 };
 
 struct MetricsResult
@@ -170,6 +171,7 @@ struct TrackerOutput
 {
   TargetEstimate est;
   double sim_t = 0.0;
+  uint64_t stamp_ns = 0;  // 拷自 StampedObservation，禁止再打墙钟
   MetricsResult metrics;
 };
 

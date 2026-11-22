@@ -33,7 +33,7 @@ public:
 
 private:
   void run();
-  void publish_kalman_markers(const common::TargetEstimate & est);
+  void publish_kalman_markers(const common::TargetEstimate & est, uint64_t stamp_ns);
 
   Target target_;
   common::Channel<common::StampedObservation> & obs_in_;
