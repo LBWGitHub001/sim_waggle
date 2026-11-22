@@ -6,7 +6,7 @@ simulation:
   bullet_speed: 25.0              # 弹速 (m/s)，给弹道解算
 
 my_robot:
-  chassis_w: 12.0                  # 底盘小陀螺角速度 (rad/s)
+  chassis_w: 7.0                  # 底盘小陀螺角速度 (rad/s)
   chassis_vx: 0.0                 # 底盘平移线速度 X (m/s)；碰到 x_range 反向
   chassis_vy: 0.0                 # 底盘平移线速度 Y (m/s)；碰到 y_range 反向
   gimbal_offset: [0.05, 0.0, 0.0] # 云台旋转中心相对底盘旋转中心的偏置 [dx, dy, dz] (m)
