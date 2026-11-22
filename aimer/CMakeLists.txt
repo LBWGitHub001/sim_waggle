@@ -1,11 +1,10 @@
 # -----------------------------------------------------------------------------
-# aimer 包：弹道 Aimer + TinyMPC Planner + AimerNode
-# include 只有 aimer/ 与 common/；tinympcstatic 只链本包
+# aimer 包：弹道 Aimer + AimerNode
+# include 只有 aimer/ 与 common/
 # -----------------------------------------------------------------------------
 add_library(aimer_node STATIC
   trajectory.cpp
   aim.cpp
-  planner.cpp
   aimer_node.cpp
 )
 
@@ -16,6 +15,5 @@ target_include_directories(aimer_node PUBLIC
 target_link_libraries(aimer_node PUBLIC
   omni_common
   OmniScope::Cpp
-  tinympcstatic
   Threads::Threads
 )

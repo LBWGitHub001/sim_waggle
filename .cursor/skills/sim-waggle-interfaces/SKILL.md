@@ -48,7 +48,7 @@ app/main.cpp  只接线三节点 + YAML + 起停。禁止 plot / plot_image / pl
 ```
 
 - `sim/`、`tracker/`、`aimer/` 是独立 CMake 包，**编译期互相看不见头文件**。唯一耦合是 `common/`（头文件：`types.hpp` / `channel.hpp` / `frames.hpp`）。
-- `common/` 无滤波、无火控。`tinympcstatic` 只链 `aimer`。
+- `common/` 无滤波、无火控。
 - 禁止 `#include` 对面包的头。需要新数据就**加性**扩 `common` 消息。
 - 遥测：`omniscope::plot` / `plot_markers` / `plot_tfs` 只写在 **SimNode / TrackerNode / AimerNode**。main 禁止 `plot` 和 `plot_image`。
 
@@ -101,14 +101,14 @@ estimate() -> TargetEstimate
 | `LatestSlot<T>` | keep_last(1) |
 | `SimNode` | fps 推进；先发 t=0；话题：`obs_out` / `gt_out`；观测 RNG 种子 42 |
 | `TrackerNode` | 直接持有 `tracker::Target`；消费 FIFO；读 `gt_in` 做误差；写 `est_out`；发 `kal_*`/`err_*`/Kalman Marker |
-| `AimerNode` | 直接持有 `Planner`；`plan(est)`；写 `cmd_out`；发 `cmd_*` 与 `aim.lead` |
+| `AimerNode` | 直接持有 `Aimer`；`aim(est)` 出无约束射击角；写 `cmd_out`；发 `cmd_*` 与 `aim.lead` |
 | 收尾 | `sim.stop(); sim.join(); tracker.join(); aimer.join();`（sim 关 obs 通道，tracker 关 est 通道） |
 
 仿真时钟 `sim_t = frame * dt`，与墙钟无关。
 
 ## YAML（`configs/sim_waggle.yaml`）
 
-`app/main.cpp::load_config()` 一处解析。节：`simulation` / `my_robot` / `target_robot` / `measurement` / `aimer` / `planner` / `ekf` / `remote_logger`。字段表见 [interfaces.md](interfaces.md)。
+`app/main.cpp::load_config()` 一处解析。节：`simulation` / `my_robot` / `target_robot` / `measurement` / `aimer` / `ekf` / `remote_logger`。字段表见 [interfaces.md](interfaces.md)。
 
 ## 基线状态（`tracker::Target`，11 维）
 
@@ -120,7 +120,7 @@ estimate() -> TargetEstimate
 - 过程噪声 `EkfParams`；约瑟夫形式协方差（`tools::ExtendedKalmanFilter`）
 - 仿真 `armor_in_robot(i,n,r,l,h)` 必须与 `h_armor_xyz` 同一套几何
 
-火控是平台能力（main）：`common::Aimer` 出无约束射击角，`common::Planner`（TinyMPC）出可行 `cmd.yaw/pitch`。不做开火判定，不驱动仿真 camera。
+火控是平台能力（main）：`common::Aimer` 选板 + 弹道，写出无约束 `cmd.yaw/pitch`（与 `target_*` 相同）。不做开火判定，不驱动仿真 camera。无 MPC。
 
 ## 硬约束
 

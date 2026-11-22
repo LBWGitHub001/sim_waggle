@@ -18,7 +18,7 @@
 | `MetricsResult` | `err_*` / rms | gimbal；定义在 `types.hpp` |
 | `StampedObservation` | `obs, sim_t, frame` | SimNode → TrackerNode |
 | `GimbalCommand` | `valid, target_yaw/pitch, yaw/pitch, *vel/*acc, fly_time, aim_xyz` | gimbal；无 `shoot` |
-| `AimerParams` / `PlannerParams` | 偏移、coming/leaving、Q/R、max_acc | — |
+| `AimerParams` | 偏移、coming/leaving、delay | — |
 | `TrackerOutput` | `est, sim_t, metrics`（**不含 cmd**） | TrackerNode → AimerNode |
 | `SimulationConfig` | 见 YAML 映射 | — |
 
@@ -65,13 +65,11 @@ compute_aim_lead_point(est, flight_time) -> Vector3d
 
 `est.x.size() < 11` 时跳过评估。
 
-### 1.4 弹道与规划（`aimer/`：`trajectory.hpp` / `aim.hpp` / `planner.hpp`）
+### 1.4 弹道（`aimer/`：`trajectory.hpp` / `aim.hpp`）
 
 - `BulletTrajectory(v0, d, h)`：无阻力，`pitch` 抬头为正
 - `propagate_estimate(est, dt)`：11 维 CV + `h_armor_xyz` 重建装甲
-- `Aimer::aim`：coming/leaving 选板 + 飞行时间迭代 → 无约束 `target_yaw/pitch`
-- `Planner::plan`：TinyMPC 开环平滑（`dt=0.01`，`HORIZON=100`，\(x_0\) 来自射击轨迹）。时域里 coming/leaving 无解时沿用上一拍射击角。无 `fire`
-- 求解器在 `thirdparty/tinympc`，**只** `aimer_node` 链接 `tinympcstatic`
+- `Aimer::aim`：coming/leaving 选板 + 飞行时间迭代 → 无约束 `cmd.yaw/pitch`（与 `target_*` 相同）。无 MPC、无 `fire`
 
 ## 2. `sim/` — 物理与观测
 
@@ -139,12 +137,12 @@ start() / stop() / join() / finished()
 ### `AimerNode`
 
 ```
-AimerNode(AimerParams, PlannerParams,
+AimerNode(AimerParams,
           Channel<TrackerOutput>&, LatestSlot<GroundTruth>&,
           LatestSlot<GimbalCommand>&, bullet_speed=25)
 ```
 
-`cmd = planner.plan(est, bullet_speed)`。发 `cmd_*`、`true_camera_yaw_deg` / `true_aim_yaw_deg`、`aim.lead` Marker。
+`cmd = aimer.aim(est, bullet_speed)`。发 `cmd_*`、`true_camera_yaw_deg` / `true_aim_yaw_deg`、`aim.lead` Marker。
 
 ## 5. `app/` 接线
 
@@ -158,7 +156,7 @@ LatestSlot<GimbalCommand> cmd_slot;
 
 SimNode sim(cfg.sim, {obs_channel, gt_slot});
 TrackerNode tracker(radius, armor_num, ekf, p0, obs_channel, est_channel, gt_slot, bullet_speed);
-AimerNode aimer(cfg.sim.aimer, cfg.sim.planner, est_channel, gt_slot, cmd_slot, bullet_speed);
+AimerNode aimer(cfg.sim.aimer, est_channel, gt_slot, cmd_slot, bullet_speed);
 ```
 
 CLI：`sim_waggle [config.yaml]`，默认 `configs/sim_waggle.yaml`。
@@ -185,8 +183,6 @@ Host：`thirdparty/OmniScope/host/start.sh`，门户 `http://127.0.0.1:8080`。
 | `aimer.yaw_offset/pitch_offset` | 度→rad | 0 |
 | `aimer.coming_angle/leaving_angle` | 度→rad | 55 / 20 |
 | `aimer.delay_time` | s | 0 |
-| `planner.max_yaw_acc / max_pitch_acc` | rad/s² | 50 / 100 |
-| `planner.Q_yaw / R_yaw / Q_pitch / R_pitch` | TinyMPC 权重 | `[9e6,0]` / `[1]` |
 | `measurement.enable_noise` | | true |
 | `measurement.noise_pos_std` | m | 0.005 |
 | `measurement.noise_yaw_std` | rad | 0.01 |

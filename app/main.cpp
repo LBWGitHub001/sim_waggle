@@ -93,27 +93,6 @@ AppConfig load_config(const std::string & path)
     cfg.sim.aimer.leaving_angle = an["leaving_angle"].as<double>(20.0) * kDeg;
     cfg.sim.aimer.delay_time = an["delay_time"].as<double>(0.0);
   }
-  if (yaml["planner"]) {
-    auto pn = yaml["planner"];
-    cfg.sim.planner.max_yaw_acc = pn["max_yaw_acc"].as<double>(50.0);
-    cfg.sim.planner.max_pitch_acc = pn["max_pitch_acc"].as<double>(100.0);
-    if (pn["Q_yaw"]) {
-      auto q = pn["Q_yaw"].as<std::vector<double>>();
-      if (q.size() >= 2) cfg.sim.planner.Q_yaw = Eigen::Vector2d(q[0], q[1]);
-    }
-    if (pn["R_yaw"]) {
-      auto r = pn["R_yaw"].as<std::vector<double>>();
-      if (!r.empty()) cfg.sim.planner.R_yaw = r[0];
-    }
-    if (pn["Q_pitch"]) {
-      auto q = pn["Q_pitch"].as<std::vector<double>>();
-      if (q.size() >= 2) cfg.sim.planner.Q_pitch = Eigen::Vector2d(q[0], q[1]);
-    }
-    if (pn["R_pitch"]) {
-      auto r = pn["R_pitch"].as<std::vector<double>>();
-      if (!r.empty()) cfg.sim.planner.R_pitch = r[0];
-    }
-  }
   if (yaml["remote_logger"]) {
     auto rln = yaml["remote_logger"];
     cfg.logger.control_port = rln["control_port"].as<uint16_t>(15000);
@@ -160,7 +139,7 @@ int main(int argc, char * argv[])
     cfg.sim.target_radius, cfg.sim.armor_num, cfg.ekf, cfg.p0, obs_channel, est_channel, gt_slot,
     cfg.sim.bullet_speed);
   aimer::AimerNode aimer_node(
-    cfg.sim.aimer, cfg.sim.planner, est_channel, gt_slot, cmd_slot, cfg.sim.bullet_speed);
+    cfg.sim.aimer, est_channel, gt_slot, cmd_slot, cfg.sim.bullet_speed);
 
   auto & logger = omniscope::RemoteLogger::instance();
   logger.init(cfg.logger);
